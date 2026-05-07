@@ -207,6 +207,44 @@ body.modal-open { overflow: hidden; } /* :has() fallback */
     flex-shrink: 0;
 }
 
+/* ---- Game mode toggle (자체전 / 매치전) ---- */
+.mode-toggle {
+    display: inline-flex;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.mode-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.55);
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-weight: 700;
+    transition: 0.2s;
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+}
+.mode-btn.active {
+    background: linear-gradient(135deg, #66bb6a, #43a047);
+    color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+}
+.mode-btn:hover:not(.active) {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+}
+
+/* Match mode: hide blue team entirely (data preserved, just visually removed) */
+body.match-mode .blue-sidebar { display: none !important; }
+body.match-mode .player[data-team="blue"] { display: none !important; }
+body.match-mode .quarter-swap-options { display: none !important; }
+
 .header-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -983,7 +1021,13 @@ body.modal-open { overflow: hidden; } /* :has() fallback */
         <div class="main-panel">
             <header class="app-header">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
-                    <h1 style="margin: 0;">Tactical Board</h1>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div class="mode-toggle" role="tablist" aria-label="경기 모드">
+                            <button class="mode-btn active" data-mode="intramural" type="button" title="2팀(빨강+파랑)을 함께 운용">자체전</button>
+                            <button class="mode-btn" data-mode="match" type="button" title="우리 팀 1팀의 라인업만 작성">매치전</button>
+                        </div>
+                        <h1 style="margin: 0;">Tactical Board</h1>
+                    </div>
                     <div class="header-actions" style="display: flex; gap: 4px;">
                         <button id="summary-btn" class="header-btn" style="background:#6a1b9a; border-color:#6a1b9a;">📊 출전 요약</button>
                         <button id="export-img-btn" class="header-btn" style="background:#0288d1; border-color:#0288d1;" title="1~4쿼터를 한 장의 이미지로 캡처">📸 전체 캡처</button>
@@ -1226,6 +1270,7 @@ let players = { red: [], blue: [] };
 let currentQuarter = 1;
 
 let teamData = {
+    gameMode: 'intramural', // 'intramural' (자체전: 2팀) or 'match' (매치전: 1팀 — 빨강만)
     teamNames: { red: "🔴 Red Team", blue: "🔵 Blue Team" },
     teamColors: { red: "#e53935", blue: "#1e88e5" },
     drawings: { 1: [], 2: [], 3: [], 4: [] },
@@ -1316,6 +1361,9 @@ function loadData() {
                     }
                 });
             }
+            if (teamData.gameMode !== 'match' && teamData.gameMode !== 'intramural') {
+                teamData.gameMode = 'intramural';
+            }
             return true;
         }
     } catch(e) {
@@ -1332,6 +1380,21 @@ function applyTeamColors() {
     const bluePicker = document.querySelector('.team-color-picker[data-team="blue"]');
     if (redPicker) redPicker.value = colors.red;
     if (bluePicker) bluePicker.value = colors.blue;
+}
+
+function activeTeams() {
+    return teamData.gameMode === 'match' ? ['red'] : ['red', 'blue'];
+}
+
+function applyGameMode(mode) {
+    if (mode !== 'match' && mode !== 'intramural') mode = 'intramural';
+    teamData.gameMode = mode;
+    document.body.classList.toggle('match-mode', mode === 'match');
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
+    // Cancel any pending swap when switching modes (the partner slot may be hidden)
+    swapState = { red: null, blue: null };
 }
 
 function initPitch() {
@@ -1365,6 +1428,7 @@ function initPitch() {
     // Active class for formation buttons is managed by loadQuarter -> updateFormationActiveClass
 
     applyTeamColors();
+    applyGameMode(teamData.gameMode || 'intramural');
 
     ['red', 'blue'].forEach(team => {
         document.getElementById(`${team}-team-title`).innerText = teamData.teamNames[team];
@@ -1785,40 +1849,51 @@ async function captureAllQuarters() {
         ctx.fillStyle = '#121212';
         ctx.fillRect(0, 0, totalW, totalH);
 
-        // Header — team names colored, with " vs "
+        // Header — team names colored, with " vs " (intramural) or single team (match)
         const redName = (teamData.teamNames && teamData.teamNames.red) || '🔴 Red Team';
         const blueName = (teamData.teamNames && teamData.teamNames.blue) || '🔵 Blue Team';
         const redColor = (teamData.teamColors && teamData.teamColors.red) || '#e53935';
         const blueColor = (teamData.teamColors && teamData.teamColors.blue) || '#1e88e5';
+        const matchMode = teamData.gameMode === 'match';
 
         const titleFont = "bold 38px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
         ctx.font = titleFont;
         ctx.textBaseline = 'middle';
 
-        const vsText = '  vs  ';
-        const redW = ctx.measureText(redName).width;
-        const vsW = ctx.measureText(vsText).width;
-        const blueW = ctx.measureText(blueName).width;
-        const titleTotalW = redW + vsW + blueW;
         const titleY = Math.round(headerH / 2 - 8);
-        let x = Math.round((totalW - titleTotalW) / 2);
 
-        ctx.textAlign = 'left';
-        ctx.fillStyle = redColor;
-        ctx.fillText(redName, x, titleY);
-        x += redW;
-        ctx.fillStyle = '#fff';
-        ctx.fillText(vsText, x, titleY);
-        x += vsW;
-        ctx.fillStyle = blueColor;
-        ctx.fillText(blueName, x, titleY);
+        if (matchMode) {
+            ctx.textAlign = 'center';
+            ctx.fillStyle = redColor;
+            ctx.fillText(redName, totalW / 2, titleY);
+        } else {
+            const vsText = '  vs  ';
+            const redW = ctx.measureText(redName).width;
+            const vsW = ctx.measureText(vsText).width;
+            const blueW = ctx.measureText(blueName).width;
+            const titleTotalW = redW + vsW + blueW;
+            let x = Math.round((totalW - titleTotalW) / 2);
+
+            ctx.textAlign = 'left';
+            ctx.fillStyle = redColor;
+            ctx.fillText(redName, x, titleY);
+            x += redW;
+            ctx.fillStyle = '#fff';
+            ctx.fillText(vsText, x, titleY);
+            x += vsW;
+            ctx.fillStyle = blueColor;
+            ctx.fillText(blueName, x, titleY);
+        }
 
         // Subtitle
         ctx.textAlign = 'center';
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         ctx.font = "20px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
         const dateStr = new Date().toISOString().slice(0, 10);
-        ctx.fillText(`1 ~ 4쿼터 전술판 · ${dateStr}`, totalW / 2, headerH / 2 + 28);
+        const subtitle = matchMode
+            ? `매치전 · 1 ~ 4쿼터 전술판 · ${dateStr}`
+            : `1 ~ 4쿼터 전술판 · ${dateStr}`;
+        ctx.fillText(subtitle, totalW / 2, headerH / 2 + 28);
 
         // Pitches in 2×2
         const pitchY1 = headerH + gap;
@@ -1919,6 +1994,20 @@ if (importBtn) {
         }
     });
 }
+
+/* =========================================================
+   GAME MODE TOGGLE (자체전 / 매치전)
+   ========================================================= */
+document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const mode = btn.getAttribute('data-mode');
+        if (!mode || mode === teamData.gameMode) return;
+        applyGameMode(mode);
+        // Re-render lists so any pending-swap visuals clear cleanly
+        ['red', 'blue'].forEach(t => renderLists(t));
+        saveData();
+    });
+});
 
 /* =========================================================
    TACTICAL DRAWING MODE (arrows on pitch)
@@ -2736,7 +2825,7 @@ function computeQuarterRoleCounts(team) {
 
 function renderSummary() {
     summaryBody.innerHTML = '';
-    ['red', 'blue'].forEach(team => {
+    activeTeams().forEach(team => {
         const counts = computeQuarterRoleCounts(team);
         const allNames = Object.keys(counts);
 
