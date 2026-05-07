@@ -1,0 +1,2907 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Football Formation Creator - Full Match</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+:root {
+    --bg-color: #121212;
+    --pitch-dark: #2e7d32;
+    --pitch-light: #388e3c;
+    --line-color: rgba(255, 255, 255, 0.7);
+    --red-player: #e53935;
+    --blue-player: #1e88e5;
+    /* Team color derivatives (auto-adapt when --red-player / --blue-player change) */
+    --red-light:   color-mix(in srgb, var(--red-player)  55%, white);
+    --red-dark:    color-mix(in srgb, var(--red-player)  30%, black);
+    --red-darker:  color-mix(in srgb, var(--red-player)  15%, black);
+    --blue-light:  color-mix(in srgb, var(--blue-player) 55%, white);
+    --blue-dark:   color-mix(in srgb, var(--blue-player) 30%, black);
+    --blue-darker: color-mix(in srgb, var(--blue-player) 15%, black);
+    --player-text: #ffffff;
+    --text-primary: #ffffff;
+    --surface-color: #1e1e1e;
+    --surface-light: #2c2c2c;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.app-container {
+    width: 100%;
+    max-width: 1500px;
+    height: 95vh;
+    display: flex;
+    flex-direction: row;
+    background: var(--surface-color);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+
+@media (max-width: 1000px) {
+    body {
+        align-items: flex-start;
+        padding: 0;
+    }
+    .app-container {
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        overflow: visible;
+        border-radius: 0;
+    }
+    .main-panel {
+        order: 1;
+        border-left: none;
+        border-right: none;
+        border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+    .red-sidebar {
+        order: 2;
+        border-bottom: 2px solid rgba(255,255,255,0.1);
+    }
+    .blue-sidebar {
+        order: 3;
+    }
+    .pitch-container {
+        padding: 10px;
+        overflow: visible;
+    }
+    .pitch {
+        max-width: 450px;
+    }
+    .pitch-wrap {
+        max-height: none;
+    }
+    .header-actions {
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 10px;
+    }
+    .app-header > div:first-child {
+        flex-direction: column !important;
+        gap: 10px;
+    }
+}
+
+/* ==================================================
+   MOBILE EDITING FIXES (touch-friendly tap targets,
+   no iOS auto-zoom on input focus, scroll lock, etc.)
+   ================================================== */
+
+/* Remove 300ms tap delay on iOS Safari */
+button, .formation-btn, .quarter-btn, .header-btn, .swap-btn,
+.tool-btn, .modal-close, .btn-apply, .roster-del-btn,
+.quarter-swap-target-btn, .player {
+    touch-action: manipulation;
+}
+
+/* Body scroll lock when ANY modal is open — uses CSS :has() (modern browsers) */
+body:has(.modal-overlay.open) { overflow: hidden; }
+body.modal-open { overflow: hidden; } /* :has() fallback */
+
+/* Focus highlight for keyboard / mobile users */
+.player-list input:focus {
+    background: rgba(76,175,80,0.18);
+    box-shadow: inset 0 0 0 1px rgba(76,175,80,0.6);
+    border-radius: 4px;
+}
+
+@media (max-width: 1000px) {
+    /* Prevent iOS Safari from auto-zooming when an input is focused.
+       16px is the iOS threshold below which the page zooms in. */
+    .player-list input,
+    #paste-textarea,
+    #quarter-swap-modal input[type="text"],
+    .modal-content input[type="text"],
+    .modal-content input[type="number"],
+    .modal-content textarea {
+        font-size: 16px;
+    }
+
+    /* Larger tap targets on touch devices */
+    .swap-btn {
+        min-width: 40px;
+        min-height: 36px;
+        padding: 6px 10px;
+        font-size: 0.95rem;
+    }
+    .player-list li { padding: 6px 8px; }
+    .player-list input {
+        padding: 8px 6px;
+        line-height: 1.3;
+    }
+    .formation-btn { padding: 8px 12px; font-size: 0.85rem; min-height: 36px; }
+    .quarter-btn { padding: 8px 14px; font-size: 0.9rem; min-height: 38px; }
+    .header-btn { padding: 7px 10px; font-size: 0.78rem; min-height: 32px; }
+    .tool-btn { padding: 7px 10px; font-size: 0.82rem; min-height: 32px; }
+    .modal-close { padding: 8px 14px; font-size: 0.9rem; }
+    .btn-apply { padding: 10px 18px; font-size: 0.95rem; }
+
+    /* Quarter swap and rotation modal action buttons larger on mobile */
+    .quarter-swap-target-btn { padding: 12px 18px; font-size: 1rem; }
+
+    /* Sidebar always full width and visible — no shrinking */
+    .sidebar { min-width: 0; }
+
+    /* Slightly larger marker on phone for fingers */
+    .player {
+        width: 42px;
+        height: 42px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 480px) {
+    .app-header { padding: 10px; }
+    .app-header h1 { font-size: 1.15rem; }
+    .hint-text { font-size: 0.78rem; margin-top: 6px; line-height: 1.45; }
+    .player { width: 40px; height: 40px; font-size: 10px; }
+}
+
+/* Short desktops (laptop 1366x768 등) — compact header */
+@media (max-width: 1000px) { /* mobile already handled above */ }
+@media (min-width: 1001px) and (max-height: 800px) {
+    .app-header { padding: 10px 15px; }
+    .app-header h1 { font-size: 1.25rem; }
+    .app-header > div:first-child { margin-bottom: 8px !important; }
+    .hint-text { margin-top: 6px; font-size: 0.78rem; }
+}
+
+.main-panel {
+    flex: 1.5;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid rgba(255,255,255,0.1);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.app-header {
+    padding: 15px;
+    text-align: center;
+    background: linear-gradient(135deg, #1e1e1e, #2a2a2a);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.app-header h1 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    flex-shrink: 0;
+}
+
+.header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    row-gap: 4px;
+}
+
+.header-btn {
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 4px 7px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.68rem;
+    font-weight: 600;
+    transition: 0.3s;
+    white-space: nowrap;
+    line-height: 1.2;
+    flex-shrink: 0;
+}
+.header-btn:hover {
+    background: #4caf50;
+    border-color: #4caf50;
+    color: #fff;
+}
+
+.hint-text {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.6);
+    margin-top: 8px;
+}
+
+.quarter-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+}
+
+.quarter-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    color: var(--text-primary);
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.quarter-btn:hover {
+    background: rgba(255,255,255,0.15);
+}
+
+.quarter-btn.active {
+    background: #4caf50;
+    color: #fff;
+    border-color: #4caf50;
+}
+
+/* Sidebars */
+.sidebar {
+    flex: 1;
+    min-width: 300px;
+    background: var(--surface-light);
+    display: flex;
+    flex-direction: column;
+}
+
+.team-title {
+    padding: 15px;
+    text-align: center;
+    font-size: 1.2rem;
+    font-weight: 800;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    outline: none;
+    cursor: text;
+    transition: background-color 0.3s;
+}
+.team-title:focus {
+    background-color: rgba(255,255,255,0.1) !important;
+}
+.red-sidebar .team-title { background: linear-gradient(135deg, var(--red-dark), var(--red-darker)); color: var(--red-light); }
+.blue-sidebar .team-title { background: linear-gradient(135deg, var(--blue-dark), var(--blue-darker)); color: var(--blue-light); }
+
+/* Formation Controls */
+.formation-controls {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+}
+
+.formation-btn {
+    background: rgba(255,255,255,0.05);
+    border: none;
+    color: var(--text-primary);
+    padding: 6px 12px;
+    border-radius: 15px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.formation-btn:hover { background: rgba(255,255,255,0.2); }
+.red-sidebar .formation-btn.active { background: var(--red-player); color: #fff; }
+.blue-sidebar .formation-btn.active { background: var(--blue-player); color: #fff; }
+
+.pitch-container {
+    flex: 1;
+    padding: 15px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--surface-color);
+    min-height: 0;
+    overflow: hidden;
+}
+
+.pitch {
+    position: relative;
+    width: 100%;
+    max-width: min(450px, calc((100vh - 260px) * 2 / 3));
+    aspect-ratio: 2 / 3;
+    background: repeating-linear-gradient(
+        0deg,
+        var(--pitch-dark),
+        var(--pitch-dark) 10%,
+        var(--pitch-light) 10%,
+        var(--pitch-light) 20%
+    );
+    border: 2px solid var(--line-color);
+    border-radius: 5px;
+    overflow: hidden;
+    flex-shrink: 1;
+}
+
+/* Pitch Markings */
+.center-line {
+    position: absolute;
+    top: 50%;
+    width: 100%;
+    height: 2px;
+    background: var(--line-color);
+    transform: translateY(-50%);
+}
+
+.center-circle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30%;
+    aspect-ratio: 1;
+    border: 2px solid var(--line-color);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.center-circle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    background: var(--line-color);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.penalty-box {
+    position: absolute;
+    left: 50%;
+    width: 60%;
+    height: 18%;
+    border: 2px solid var(--line-color);
+    transform: translateX(-50%);
+}
+
+.penalty-box.top { top: 0; border-top: none; }
+.penalty-box.bottom { bottom: 0; border-bottom: none; }
+
+.six-yard-box {
+    position: absolute;
+    left: 50%;
+    width: 30%;
+    height: 6%;
+    border: 2px solid var(--line-color);
+    transform: translateX(-50%);
+}
+
+.six-yard-box.top { top: 0; border-top: none; }
+.six-yard-box.bottom { bottom: 0; border-bottom: none; }
+
+.penalty-arc {
+    position: absolute;
+    left: 50%;
+    width: 25%;
+    aspect-ratio: 1;
+    border: 2px solid var(--line-color);
+    border-radius: 50%;
+    transform: translateX(-50%);
+}
+
+.penalty-arc.top {
+    top: 18%;
+    clip-path: polygon(0 50%, 100% 50%, 100% 100%, 0 100%);
+    transform: translate(-50%, -50%);
+}
+.penalty-arc.bottom {
+    bottom: 18%;
+    clip-path: polygon(0 0, 100% 0, 100% 50%, 0 50%);
+    transform: translate(-50%, 50%);
+}
+
+/* Player Marker */
+.player {
+    position: absolute;
+    width: 45px;
+    height: 45px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--player-text);
+    font-size: 11px;
+    font-weight: bold;
+    cursor: grab;
+    transform: translate(-50%, -50%);
+    transition: left 0.5s ease-out, top 0.5s ease-out;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    user-select: none;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    touch-action: none;
+}
+
+.player[data-team="red"] { background: var(--red-player); }
+.player[data-team="blue"] { background: var(--blue-player); }
+
+.player.dragging {
+    cursor: grabbing;
+    transition: none;
+    transform: translate(-50%, -50%) scale(1.1);
+    z-index: 10;
+    box-shadow: 0 10px 15px rgba(0,0,0,0.5);
+}
+
+/* Lists */
+.list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.list-section {
+    margin-bottom: 25px;
+}
+
+.list-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding-bottom: 5px;
+}
+.red-sidebar h3 { color: var(--red-light); }
+.blue-sidebar h3 { color: var(--blue-light); }
+
+.player-list { list-style: none; }
+
+.player-list li {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+    background: rgba(0,0,0,0.2);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.player-list input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 0.9rem;
+    padding: 4px;
+    outline: none;
+}
+
+.player-list input::placeholder { color: rgba(255,255,255,0.3); }
+
+.swap-btn {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+    transition: 0.2s;
+    font-size: 0.8rem;
+}
+
+.red-sidebar .swap-btn:hover { background: var(--red-player); color: #fff; }
+.blue-sidebar .swap-btn:hover { background: var(--blue-player); color: #fff; }
+
+.swap-btn.swapping { background: #4caf50 !important; color: #fff; box-shadow: 0 0 8px #4caf50; }
+
+/* Quarter swap modal */
+.quarter-swap-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin: 14px 0;
+}
+.quarter-swap-target-btn {
+    background: linear-gradient(135deg, #ec407a, #c2185b);
+    border: none;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.95rem;
+    flex: 1 1 30%;
+    min-width: 110px;
+    transition: 0.2s;
+}
+.quarter-swap-target-btn:hover { background: linear-gradient(135deg, #f06292, #d81b60); transform: translateY(-1px); }
+
+.quarter-swap-options {
+    background: rgba(255,255,255,0.04);
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 0.86rem;
+    color: rgba(255,255,255,0.85);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.quarter-swap-options input[type="checkbox"] { accent-color: #ec407a; }
+
+.stats-list { list-style: none; }
+.stats-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    padding: 8px 6px;
+    border-bottom: 1px dashed rgba(255,255,255,0.1);
+}
+
+.stats-list span.count {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 0.75rem;
+}
+.red-sidebar .count { background: var(--red-player); }
+.blue-sidebar .count { background: var(--blue-player); }
+
+/* ---- Drawing toolbar + SVG overlay ---- */
+.pitch-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 450px;
+    max-height: 100%;
+    gap: 8px;
+    min-height: 0;
+}
+
+.pitch-toolbar {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.tool-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.tool-btn:hover { background: rgba(255,255,255,0.15); }
+.tool-btn.active { background: #ffb300; border-color: #ffb300; color: #000; }
+
+.tool-color {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    cursor: pointer;
+    background: transparent;
+}
+.tool-color::-webkit-color-swatch-wrapper { padding: 0; }
+.tool-color::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+.drawing-layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+.pitch.draw-mode .drawing-layer {
+    pointer-events: auto;
+    z-index: 50;
+    cursor: crosshair;
+    touch-action: none;
+}
+.pitch.draw-mode .player {
+    pointer-events: none;
+    opacity: 0.75;
+}
+
+/* ---- Team color picker ---- */
+.team-color-picker {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-radius: 50%;
+    cursor: pointer;
+    background: transparent;
+    flex-shrink: 0;
+}
+.team-color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.team-color-picker::-webkit-color-swatch { border: none; border-radius: 50%; }
+
+/* ---- Summary Modal ---- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+
+.modal-content {
+    background: var(--surface-color);
+    border-radius: 12px;
+    max-width: 760px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    padding: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    gap: 10px;
+}
+.modal-header h2 { font-size: 1.15rem; font-weight: 800; }
+
+.modal-close {
+    background: rgba(255,255,255,0.1);
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.modal-close:hover { background: rgba(255,255,255,0.2); }
+
+.summary-team { margin-bottom: 22px; }
+.summary-team h3 {
+    font-size: 1rem;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+.summary-table th, .summary-table td {
+    padding: 7px 8px;
+    text-align: center;
+    border-bottom: 1px dashed rgba(255,255,255,0.08);
+}
+.summary-table th:first-child, .summary-table td:first-child {
+    text-align: left;
+}
+.summary-table th {
+    background: rgba(255,255,255,0.05);
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.7);
+}
+.summary-table td.total-cell { font-weight: 700; }
+.summary-row-warn { background: rgba(244,67,54,0.15); }
+.summary-row-warn td { color: #ff8a80; }
+.summary-row-warn td:first-child::before { content: "🚨 "; }
+
+.summary-legend {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.55);
+    margin-top: 8px;
+    text-align: center;
+}
+
+.summary-empty {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+    font-size: 0.9rem;
+}
+
+/* ---- Rotation Modal ---- */
+.rotation-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 15px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    flex-wrap: wrap;
+}
+
+.btn-apply {
+    background: #4caf50;
+    border: none;
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+.btn-apply:hover { background: #66bb6a; }
+
+.rotation-intro {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.rotation-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+@media (max-width: 720px) {
+    .rotation-grid { grid-template-columns: 1fr; gap: 22px; }
+}
+
+.rotation-col h4 {
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.85);
+}
+
+.rot-subheader {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.55);
+    margin-top: 10px;
+    margin-bottom: 4px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.rotation-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.86rem;
+}
+.rotation-row .rot-pos {
+    font-weight: 700;
+    width: 44px;
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.55);
+    text-align: left;
+    flex-shrink: 0;
+}
+.rotation-row .rot-name {
+    flex: 1;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rotation-row .rot-meta {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+    flex-shrink: 0;
+}
+.rotation-row.rot-changed { background: rgba(76,175,80,0.18); }
+.rotation-row.rot-warn { background: rgba(244,67,54,0.12); }
+.rotation-row.rot-warn .rot-meta { color: #ff8a80; font-weight: 600; }
+
+.rotation-empty {
+    text-align: center;
+    color: #aaa;
+    padding: 24px 12px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* ---- Paste Roster Modal ---- */
+.paste-intro {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.5;
+    margin-bottom: 10px;
+}
+
+.paste-toolbar-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+#paste-textarea {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    padding: 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 160px;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+}
+#paste-textarea:focus {
+    outline: 2px solid #4caf50;
+    outline-offset: 0;
+}
+
+.paste-options {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 0.84rem;
+    color: rgba(255,255,255,0.85);
+    flex-wrap: wrap;
+    background: rgba(0,0,0,0.18);
+    padding: 8px 12px;
+    border-radius: 6px;
+}
+.paste-options label {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.paste-options input[type="radio"] {
+    accent-color: #4caf50;
+}
+
+.paste-preview {
+    background: rgba(0,0,0,0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.paste-preview-empty {
+    color: #888;
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 18px;
+}
+
+.paste-overflow-warn {
+    background: rgba(255,167,38,0.18);
+    color: #ffb74d;
+    font-size: 0.78rem;
+    padding: 7px 10px;
+    border-radius: 6px;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.paste-count-info {
+    font-size: 0.78rem;
+    color: rgba(255,255,255,0.55);
+    margin-bottom: 8px;
+    text-align: right;
+}
+
+</style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Red Team Sidebar -->
+        <div class="sidebar red-sidebar" data-team="red">
+            <h2 class="team-title" id="red-team-title" contenteditable="true" spellcheck="false" title="클릭하여 팀 이름 변경">🔴 Red Team</h2>
+            <div class="controls formation-controls">
+                <input type="color" class="team-color-picker" data-team="red" value="#e53935" title="팀 유니폼 색상 변경">
+                <button class="formation-btn active" data-formation="4-4-2" data-team="red">4-4-2</button>
+                <button class="formation-btn" data-formation="4-3-3" data-team="red">4-3-3</button>
+                <button class="formation-btn" data-formation="4-2-3-1" data-team="red">4-2-3-1</button>
+                <button class="formation-btn" data-formation="4-1-4-1" data-team="red">4-1-4-1</button>
+                <button class="formation-btn" data-formation="3-5-2" data-team="red">3-5-2</button>
+                <button class="formation-btn copy-prev-btn" data-team="red" style="display:none; background:#ff9800; color:#fff;">⬇️ 이전 쿼터 복사</button>
+                <button class="formation-btn auto-rotate-btn" data-team="red" style="display:none; background:#4caf50; color:#fff;">🪄 공평하게 배치</button>
+                <button class="formation-btn paste-roster-btn" data-team="red" style="background:#1976d2; color:#fff;">📋 일괄 입력</button>
+                <button class="formation-btn quarter-swap-btn" data-team="red" style="background:#ec407a; color:#fff;">🔁 쿼터 인원 교체</button>
+            </div>
+
+            <div class="list-container">
+                <div class="list-section">
+                    <h3>선발 명단 (Starting XI)</h3>
+                    <ul class="player-list starting-list" id="red-starting-list"></ul>
+                </div>
+                <div class="list-section">
+                    <h3>교체 명단 (5 Subs)</h3>
+                    <ul class="player-list subs-list" id="red-subs-list"></ul>
+                </div>
+                <div class="list-section stats-section">
+                    <h3>출전 통계</h3>
+                    <ul class="stats-list" id="red-stats-list"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Panel: Pitch -->
+        <div class="main-panel">
+            <header class="app-header">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
+                    <h1 style="margin: 0;">Tactical Board</h1>
+                    <div class="header-actions" style="display: flex; gap: 4px;">
+                        <button id="summary-btn" class="header-btn" style="background:#6a1b9a; border-color:#6a1b9a;">📊 출전 요약</button>
+                        <button id="export-img-btn" class="header-btn" style="background:#0288d1; border-color:#0288d1;" title="1~4쿼터를 한 장의 이미지로 캡처">📸 전체 캡처</button>
+                        <button id="export-btn" class="header-btn">📤 공유코드 복사</button>
+                        <button id="import-btn" class="header-btn">📥 코드 불러오기</button>
+                        <button id="reset-data-btn" class="header-btn" style="color: #ff8a80; border-color: rgba(255, 138, 128, 0.4);">🗑️ 초기화</button>
+                    </div>
+                </div>
+                <div class="quarter-tabs">
+                    <button class="quarter-btn active" data-quarter="1">1 Quarter</button>
+                    <button class="quarter-btn" data-quarter="2">2 Quarter</button>
+                    <button class="quarter-btn" data-quarter="3">3 Quarter</button>
+                    <button class="quarter-btn" data-quarter="4">4 Quarter</button>
+                </div>
+                <p class="hint-text">
+                    선수 드래그로 위치 이동 · 🔄 같은 쿼터 내 두 슬롯 클릭으로 교체<br>
+                    선발 ↔ 교체 시 <strong>완전 교체</strong>(1:1 자리 바꿈) 또는 <strong>중간 교체</strong>(둘이 각 0.5쿼터씩 출전) 선택 가능 · <strong>🔁 쿼터 인원 교체</strong>는 사이드바 버튼 사용
+                </p>
+            </header>
+            <main class="pitch-container">
+                <div class="pitch-wrap">
+                    <div class="pitch" id="pitch">
+                        <svg class="drawing-layer" id="drawing-layer" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            <defs></defs>
+                        </svg>
+                        <!-- Pitch lines -->
+                        <div class="center-circle"></div>
+                        <div class="center-line"></div>
+                        <div class="penalty-box top"></div>
+                        <div class="six-yard-box top"></div>
+                        <div class="penalty-arc top"></div>
+                        <div class="penalty-box bottom"></div>
+                        <div class="six-yard-box bottom"></div>
+                        <div class="penalty-arc bottom"></div>
+                        <!-- Players injected here by JS -->
+                    </div>
+                    <div class="pitch-toolbar" id="pitch-toolbar">
+                        <button id="draw-toggle" class="tool-btn" title="그리기 모드 켜기/끄기">✏️ 그리기</button>
+                        <input type="color" id="draw-color" class="tool-color" value="#ffeb3b" title="선 색상">
+                        <button id="draw-undo" class="tool-btn" title="마지막 선 되돌리기">↩️ 되돌리기</button>
+                        <button id="draw-clear" class="tool-btn" title="이 쿼터의 모든 선 지우기">🧹 모두 지우기</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Blue Team Sidebar -->
+        <div class="sidebar blue-sidebar" data-team="blue">
+            <h2 class="team-title" id="blue-team-title" contenteditable="true" spellcheck="false" title="클릭하여 팀 이름 변경">🔵 Blue Team</h2>
+            <div class="controls formation-controls">
+                <input type="color" class="team-color-picker" data-team="blue" value="#1e88e5" title="팀 유니폼 색상 변경">
+                <button class="formation-btn active" data-formation="4-4-2" data-team="blue">4-4-2</button>
+                <button class="formation-btn" data-formation="4-3-3" data-team="blue">4-3-3</button>
+                <button class="formation-btn" data-formation="4-2-3-1" data-team="blue">4-2-3-1</button>
+                <button class="formation-btn" data-formation="4-1-4-1" data-team="blue">4-1-4-1</button>
+                <button class="formation-btn" data-formation="3-5-2" data-team="blue">3-5-2</button>
+                <button class="formation-btn copy-prev-btn" data-team="blue" style="display:none; background:#ff9800; color:#fff;">⬇️ 이전 쿼터 복사</button>
+                <button class="formation-btn auto-rotate-btn" data-team="blue" style="display:none; background:#4caf50; color:#fff;">🪄 공평하게 배치</button>
+                <button class="formation-btn paste-roster-btn" data-team="blue" style="background:#1976d2; color:#fff;">📋 일괄 입력</button>
+                <button class="formation-btn quarter-swap-btn" data-team="blue" style="background:#ec407a; color:#fff;">🔁 쿼터 인원 교체</button>
+            </div>
+            
+            <div class="list-container">
+                <div class="list-section">
+                    <h3>선발 명단 (Starting XI)</h3>
+                    <ul class="player-list starting-list" id="blue-starting-list"></ul>
+                </div>
+                <div class="list-section">
+                    <h3>교체 명단 (5 Subs)</h3>
+                    <ul class="player-list subs-list" id="blue-subs-list"></ul>
+                </div>
+                <div class="list-section stats-section">
+                    <h3>출전 통계</h3>
+                    <ul class="stats-list" id="blue-stats-list"></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="modal-overlay" id="summary-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📊 전체 출전 요약 (1~4쿼터 통합)</h2>
+                <button class="modal-close" id="summary-close">닫기</button>
+            </div>
+            <div id="summary-body"></div>
+            <div class="summary-legend">💡 총 1쿼터 이하 출전 선수는 🚨 로 경고 표시됩니다.</div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="rotation-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="rotation-title">🪄 공평하게 배치</h2>
+                <button class="modal-close" id="rotation-close">닫기</button>
+            </div>
+            <div class="rotation-intro" id="rotation-intro"></div>
+            <div id="rotation-body"></div>
+            <div class="rotation-actions">
+                <button class="modal-close" id="rotation-cancel">❌ 취소</button>
+                <button class="btn-apply" id="rotation-apply">🔄 이 대로 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="quarter-swap-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="quarter-swap-title">🔁 쿼터 인원 교체</h2>
+                <button class="modal-close" id="quarter-swap-close">닫기</button>
+            </div>
+            <div class="paste-intro" id="quarter-swap-intro"></div>
+            <label class="quarter-swap-options">
+                <input type="checkbox" id="quarter-swap-both">
+                <span>상대 팀도 같은 쿼터끼리 함께 교체 (전술 작전판도 함께 이동)</span>
+            </label>
+            <div class="quarter-swap-buttons" id="quarter-swap-buttons"></div>
+            <div class="rotation-actions">
+                <button class="modal-close" id="quarter-swap-cancel">❌ 취소</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="paste-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="paste-title">📋 명단 일괄 붙여넣기</h2>
+                <button class="modal-close" id="paste-close">닫기</button>
+            </div>
+            <div class="paste-intro">
+                카카오톡 등에서 복사한 참석자 명단을 한 줄에 한 명씩 붙여넣어 주세요.<br>
+                "1.", "1)", "1번", "(1)", "-", "*" 같은 접두사는 자동으로 제거됩니다. (선발 11명 + 교체 5명 = 최대 16명)
+            </div>
+            <div class="paste-toolbar-row">
+                <button id="paste-from-clipboard" class="tool-btn">📥 클립보드에서 가져오기</button>
+                <button id="paste-clear" class="tool-btn">🧹 입력 지우기</button>
+            </div>
+            <textarea id="paste-textarea" rows="8" placeholder="예시:&#10;1. 김철수&#10;2. 이영희&#10;3. 박민수&#10;..." spellcheck="false"></textarea>
+            <div class="paste-count-info" id="paste-count-info">인식된 이름: 0명</div>
+            <div class="paste-options">
+                <label><input type="radio" name="paste-scope" value="current" checked> 현재 쿼터에만 적용</label>
+                <label><input type="radio" name="paste-scope" value="all"> 1~4쿼터 모두에 적용</label>
+            </div>
+            <div class="rot-subheader">미리보기</div>
+            <div class="paste-preview" id="paste-preview"></div>
+            <div class="rotation-actions">
+                <button class="modal-close" id="paste-cancel">❌ 취소</button>
+                <button class="btn-apply" id="paste-apply">✅ 적용하기</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+const formations = {
+    '4-4-2': [
+        { top: '90%', left: '50%', id: 1, name: 'GK' },
+        { top: '75%', left: '20%', id: 2, name: 'LB' },
+        { top: '75%', left: '40%', id: 3, name: 'CB' },
+        { top: '75%', left: '60%', id: 4, name: 'CB' },
+        { top: '75%', left: '80%', id: 5, name: 'RB' },
+        { top: '50%', left: '20%', id: 6, name: 'LM' },
+        { top: '50%', left: '40%', id: 7, name: 'CM' },
+        { top: '50%', left: '60%', id: 8, name: 'CM' },
+        { top: '50%', left: '80%', id: 9, name: 'RM' },
+        { top: '25%', left: '35%', id: 10, name: 'ST' },
+        { top: '25%', left: '65%', id: 11, name: 'ST' }
+    ],
+    '4-3-3': [
+        { top: '90%', left: '50%', id: 1, name: 'GK' },
+        { top: '75%', left: '20%', id: 2, name: 'LB' },
+        { top: '75%', left: '40%', id: 3, name: 'CB' },
+        { top: '75%', left: '60%', id: 4, name: 'CB' },
+        { top: '75%', left: '80%', id: 5, name: 'RB' },
+        { top: '55%', left: '50%', id: 6, name: 'CDM' },
+        { top: '45%', left: '30%', id: 7, name: 'CM' },
+        { top: '45%', left: '70%', id: 8, name: 'CM' },
+        { top: '20%', left: '20%', id: 9, name: 'LW' },
+        { top: '15%', left: '50%', id: 10, name: 'ST' },
+        { top: '20%', left: '80%', id: 11, name: 'RW' }
+    ],
+    '4-2-3-1': [
+        { top: '90%', left: '50%', id: 1, name: 'GK' },
+        { top: '75%', left: '20%', id: 2, name: 'LB' },
+        { top: '75%', left: '40%', id: 3, name: 'CB' },
+        { top: '75%', left: '60%', id: 4, name: 'CB' },
+        { top: '75%', left: '80%', id: 5, name: 'RB' },
+        { top: '55%', left: '35%', id: 6, name: 'CDM' },
+        { top: '55%', left: '65%', id: 7, name: 'CDM' },
+        { top: '40%', left: '50%', id: 8, name: 'CAM' },
+        { top: '30%', left: '25%', id: 9, name: 'LW' },
+        { top: '30%', left: '75%', id: 10, name: 'RW' },
+        { top: '20%', left: '50%', id: 11, name: 'ST' }
+    ],
+    '4-1-4-1': [
+        { top: '90%', left: '50%', id: 1, name: 'GK' },
+        { top: '75%', left: '20%', id: 2, name: 'LB' },
+        { top: '75%', left: '40%', id: 3, name: 'CB' },
+        { top: '75%', left: '60%', id: 4, name: 'CB' },
+        { top: '75%', left: '80%', id: 5, name: 'RB' },
+        { top: '60%', left: '50%', id: 6, name: 'CDM' },
+        { top: '45%', left: '20%', id: 7, name: 'LM' },
+        { top: '45%', left: '40%', id: 8, name: 'CM' },
+        { top: '45%', left: '60%', id: 9, name: 'CM' },
+        { top: '45%', left: '80%', id: 10, name: 'RM' },
+        { top: '20%', left: '50%', id: 11, name: 'ST' }
+    ],
+    '3-5-2': [
+        { top: '90%', left: '50%', id: 1, name: 'GK' },
+        { top: '75%', left: '25%', id: 2, name: 'CB' },
+        { top: '75%', left: '50%', id: 3, name: 'CB' },
+        { top: '75%', left: '75%', id: 4, name: 'CB' },
+        { top: '55%', left: '35%', id: 5, name: 'CDM' },
+        { top: '55%', left: '65%', id: 6, name: 'CDM' },
+        { top: '45%', left: '15%', id: 7, name: 'LWB' },
+        { top: '40%', left: '50%', id: 8, name: 'CAM' },
+        { top: '45%', left: '85%', id: 9, name: 'RWB' },
+        { top: '20%', left: '35%', id: 10, name: 'ST' },
+        { top: '20%', left: '65%', id: 11, name: 'ST' }
+    ]
+};
+
+const pitch = document.getElementById('pitch');
+const quarterBtns = document.querySelectorAll('.quarter-btn');
+
+const domElements = {
+    red: {
+        startingListEl: document.getElementById('red-starting-list'),
+        subsListEl: document.getElementById('red-subs-list'),
+        statsListEl: document.getElementById('red-stats-list')
+    },
+    blue: {
+        startingListEl: document.getElementById('blue-starting-list'),
+        subsListEl: document.getElementById('blue-subs-list'),
+        statsListEl: document.getElementById('blue-stats-list')
+    }
+};
+
+let players = { red: [], blue: [] }; 
+let currentQuarter = 1;
+
+let teamData = {
+    teamNames: { red: "🔴 Red Team", blue: "🔵 Blue Team" },
+    teamColors: { red: "#e53935", blue: "#1e88e5" },
+    drawings: { 1: [], 2: [], 3: [], 4: [] },
+    formations: {
+        red: { 1: '4-4-2', 2: '4-4-2', 3: '4-4-2', 4: '4-4-2' },
+        blue: { 1: '4-4-2', 2: '4-4-2', 3: '4-4-2', 4: '4-4-2' }
+    },
+    red: {
+        1: { starters: [], subs: [] },
+        2: { starters: [], subs: [] },
+        3: { starters: [], subs: [] },
+        4: { starters: [], subs: [] }
+    },
+    blue: {
+        1: { starters: [], subs: [] },
+        2: { starters: [], subs: [] },
+        3: { starters: [], subs: [] },
+        4: { starters: [], subs: [] }
+    }
+};
+
+let swapState = { red: null, blue: null }; 
+
+function getFormationCoords(formationKey, team) {
+    return formations[formationKey].map(p => {
+        const topVal = parseFloat(p.top);
+        const leftVal = parseFloat(p.left);
+        // Forwards (top < 30 in original layout) sit close to the center line for both teams,
+        // so apply a small lateral offset to avoid visual overlap with the opposing strikers.
+        const isForward = topVal < 30;
+        const lateralOffset = isForward ? 5 : 0;
+        if (team === 'red') {
+            return {
+                name: p.name,
+                top: `${41 + (topVal * 0.6)}%`,
+                left: `${leftVal - lateralOffset}%`
+            };
+        } else {
+            return {
+                name: p.name,
+                top: `${-1 + ((100 - topVal) * 0.6)}%`,
+                left: `${100 - leftVal + lateralOffset}%`
+            };
+        }
+    });
+}
+
+function createSubs() {
+    return Array.from({length: 5}, (_, i) => ({ id: `sub-${i+1}`, customName: '' }));
+}
+
+function saveData() {
+    try {
+        localStorage.setItem('footballFormationData', JSON.stringify(teamData));
+    } catch(e) {
+        console.warn("localStorage save failed (incognito/webview restriction)", e);
+    }
+}
+
+function loadData() {
+    try {
+        const saved = localStorage.getItem('footballFormationData');
+        if (saved) {
+            teamData = JSON.parse(saved);
+            if (!teamData.teamNames) {
+                teamData.teamNames = { red: "🔴 Red Team", blue: "🔵 Blue Team" };
+            }
+            if (!teamData.teamColors) {
+                teamData.teamColors = { red: "#e53935", blue: "#1e88e5" };
+            }
+            if (!teamData.drawings) {
+                teamData.drawings = { 1: [], 2: [], 3: [], 4: [] };
+            } else {
+                for (let q = 1; q <= 4; q++) {
+                    if (!teamData.drawings[q]) teamData.drawings[q] = [];
+                }
+            }
+            if (!teamData.formations) {
+                teamData.formations = {
+                    red: { 1: '4-4-2', 2: '4-4-2', 3: '4-4-2', 4: '4-4-2' },
+                    blue: { 1: '4-4-2', 2: '4-4-2', 3: '4-4-2', 4: '4-4-2' }
+                };
+            } else {
+                ['red', 'blue'].forEach(t => {
+                    if (!teamData.formations[t]) teamData.formations[t] = {};
+                    for (let q = 1; q <= 4; q++) {
+                        if (!teamData.formations[t][q]) teamData.formations[t][q] = '4-4-2';
+                    }
+                });
+            }
+            return true;
+        }
+    } catch(e) {
+        console.warn('localStorage load failed (incognito/webview restriction)', e);
+    }
+    return false;
+}
+
+function applyTeamColors() {
+    const colors = teamData.teamColors || { red: "#e53935", blue: "#1e88e5" };
+    document.documentElement.style.setProperty('--red-player', colors.red);
+    document.documentElement.style.setProperty('--blue-player', colors.blue);
+    const redPicker = document.querySelector('.team-color-picker[data-team="red"]');
+    const bluePicker = document.querySelector('.team-color-picker[data-team="blue"]');
+    if (redPicker) redPicker.value = colors.red;
+    if (bluePicker) bluePicker.value = colors.blue;
+}
+
+function initPitch() {
+    const hasSavedData = loadData();
+
+    if (!hasSavedData) {
+        for (let i = 1; i <= 4; i++) {
+            const redCoords = getFormationCoords('4-4-2', 'red');
+            teamData.red[i].starters = redCoords.map((c, idx) => ({
+                id: formations['4-4-2'][idx].id,
+                name: c.name,
+                top: c.top,
+                left: c.left,
+                customName: '',
+                subInName: ''
+            }));
+            teamData.red[i].subs = createSubs();
+            
+            const blueCoords = getFormationCoords('4-4-2', 'blue');
+            teamData.blue[i].starters = blueCoords.map((c, idx) => ({
+                id: formations['4-4-2'][idx].id,
+                name: c.name,
+                top: c.top,
+                left: c.left,
+                customName: '',
+                subInName: ''
+            }));
+            teamData.blue[i].subs = createSubs();
+        }
+    }
+    // Active class for formation buttons is managed by loadQuarter -> updateFormationActiveClass
+
+    applyTeamColors();
+
+    ['red', 'blue'].forEach(team => {
+        document.getElementById(`${team}-team-title`).innerText = teamData.teamNames[team];
+        
+        teamData[team][1].starters.forEach(playerData => {
+            const playerEl = document.createElement('div');
+            playerEl.className = 'player';
+            playerEl.setAttribute('data-team', team);
+            playerEl.id = `player-${team}-${playerData.id}`;
+            
+            pitch.appendChild(playerEl);
+            players[team].push(playerEl);
+            
+            setupDrag(playerEl, team);
+        });
+    });
+    
+    loadQuarter(1);
+}
+
+function loadQuarter(q) {
+    currentQuarter = q;
+    swapState = { red: null, blue: null };
+
+    quarterBtns.forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.getAttribute('data-quarter')) === q);
+    });
+    
+    // Toggle visibility of Q2-Q4 only buttons
+    document.querySelectorAll('.copy-prev-btn, .auto-rotate-btn').forEach(btn => {
+        btn.style.display = q > 1 ? 'inline-block' : 'none';
+    });
+    
+    ['red', 'blue'].forEach(team => {
+        renderPitch(team);
+        renderLists(team);
+        renderStats(team);
+        updateFormationActiveClass(team);
+    });
+
+    renderDrawings();
+}
+
+function renderPitch(team) {
+    const data = teamData[team][currentQuarter].starters;
+    data.forEach((pData, index) => {
+        players[team][index].style.top = pData.top;
+        players[team][index].style.left = pData.left;
+
+        const baseName = pData.customName || pData.name;
+        if (pData.subInName) {
+            players[team][index].innerText = `${baseName} ▶ ${pData.subInName}`;
+            players[team][index].style.fontSize = '9px';
+        } else {
+            players[team][index].innerText = baseName;
+            players[team][index].style.fontSize = '11px';
+        }
+    });
+}
+
+function renderLists(team) {
+    const data = teamData[team][currentQuarter];
+    const els = domElements[team];
+    
+    // Render Starters
+    els.startingListEl.innerHTML = '';
+    data.starters.forEach((p, i) => {
+        const li = document.createElement('li');
+        const displayValue = p.subInName ? `${p.customName || p.name} ▶ ${p.subInName}` : (p.customName || '');
+        const fontColor = team === 'red' ? 'var(--red-light)' : 'var(--blue-light)';
+        
+        li.innerHTML = `
+            <span style="width: 40px; font-size: 0.8rem; color: ${fontColor}; font-weight: bold;">${p.name}</span>
+            <input type="text" autocomplete="off" value="${displayValue}" placeholder="이름 입력" data-team="${team}" data-type="starter" data-index="${i}">
+            <button class="swap-btn ${isSwapping(team, 'starter', i) ? 'swapping' : ''}" data-team="${team}" data-type="starter" data-index="${i}" title="같은 쿼터의 다른 슬롯 클릭으로 교체. 선발↔교체는 완전/중간(0.5Q) 선택">🔄</button>
+        `;
+        els.startingListEl.appendChild(li);
+    });
+    
+    // Render Subs
+    els.subsListEl.innerHTML = '';
+    data.subs.forEach((p, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <span style="width: 40px; font-size: 0.8rem; color: #888;">SUB</span>
+            <input type="text" autocomplete="off" value="${p.customName}" placeholder="교체 선수" data-team="${team}" data-type="sub" data-index="${i}">
+            <button class="swap-btn ${isSwapping(team, 'sub', i) ? 'swapping' : ''}" data-team="${team}" data-type="sub" data-index="${i}" title="같은 쿼터의 다른 슬롯 클릭으로 교체. 선발↔교체는 완전/중간(0.5Q) 선택">🔄</button>
+        `;
+        els.subsListEl.appendChild(li);
+    });
+
+    // Event Listeners for inputs
+    document.querySelectorAll(`.sidebar[data-team="${team}"] .player-list input`).forEach(input => {
+        input.addEventListener('input', (e) => {
+            const t = e.target.getAttribute('data-team');
+            const type = e.target.getAttribute('data-type');
+            const idx = parseInt(e.target.getAttribute('data-index'));
+            const val = e.target.value;
+            
+            if (type === 'starter') {
+                teamData[t][currentQuarter].starters[idx].customName = val;
+                teamData[t][currentQuarter].starters[idx].subInName = ''; 
+                renderPitch(t);
+            } else {
+                teamData[t][currentQuarter].subs[idx].customName = val;
+            }
+            renderStats(t);
+            saveData(); // Save on text input
+        });
+    });
+
+    // Event Listeners for swap buttons
+    document.querySelectorAll(`.sidebar[data-team="${team}"] .swap-btn`).forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const t = e.target.getAttribute('data-team');
+            const type = e.target.getAttribute('data-type');
+            const idx = parseInt(e.target.getAttribute('data-index'));
+            handleSwapClick(t, type, idx);
+        });
+    });
+}
+
+function isSwapping(team, type, index) {
+    return !!(swapState[team] && swapState[team].type === type && swapState[team].index === index);
+}
+
+function handleSwapClick(team, type, index) {
+    if (!swapState[team]) {
+        swapState[team] = { type, index };
+        renderLists(team);
+        return;
+    }
+
+    const first = swapState[team];
+    const second = { type, index };
+
+    if (first.type !== second.type || first.index !== second.index) {
+        const data = teamData[team][currentQuarter];
+
+        if (first.type !== second.type) {
+            const isStarterFirst = first.type === 'starter';
+            const starterIdx = isStarterFirst ? first.index : second.index;
+            const subIdx = isStarterFirst ? second.index : first.index;
+            const starterData = data.starters[starterIdx];
+            const subData = data.subs[subIdx];
+
+            if (confirm("두 선수를 완전히 교체하시겠습니까?\n\n[확인] 완전 교체 (1:1 자리 바꿈)\n[취소] 경기 중간 교체 (각각 0.5쿼터씩 출전)")) {
+                const temp = starterData.customName;
+                starterData.customName = subData.customName;
+                starterData.subInName = '';
+                subData.customName = temp;
+            } else {
+                starterData.subInName = subData.customName;
+                subData.customName = '';
+            }
+        } else {
+            const arr1 = first.type === 'starter' ? data.starters : data.subs;
+            const arr2 = second.type === 'starter' ? data.starters : data.subs;
+            const temp = arr1[first.index].customName;
+            arr1[first.index].customName = arr2[second.index].customName;
+            arr2[second.index].customName = temp;
+
+            if (first.type === 'starter') {
+                const tempSubIn = arr1[first.index].subInName;
+                arr1[first.index].subInName = arr2[second.index].subInName;
+                arr2[second.index].subInName = tempSubIn;
+            }
+        }
+
+        renderPitch(team);
+        renderStats(team);
+        saveData();
+    }
+
+    swapState[team] = null;
+    renderLists(team);
+}
+
+function renderStats(team) {
+    const nameCounts = {};
+    
+    for (let q = 1; q <= 4; q++) {
+        teamData[team][q].starters.forEach(s => {
+            const sName = s.customName.trim();
+            const subName = (s.subInName || '').trim();
+            
+            if (subName) {
+                if (sName) nameCounts[sName] = (nameCounts[sName] || 0) + 0.5;
+                nameCounts[subName] = (nameCounts[subName] || 0) + 0.5;
+            } else {
+                if (sName) nameCounts[sName] = (nameCounts[sName] || 0) + 1;
+            }
+        });
+        
+        teamData[team][q].subs.forEach(s => {
+            const name = s.customName.trim();
+            if (name && nameCounts[name] === undefined) {
+                nameCounts[name] = 0;
+            }
+        });
+    }
+    
+    const els = domElements[team];
+    els.statsListEl.innerHTML = '';
+    
+    const sortedNames = Object.keys(nameCounts).sort((a, b) => {
+        if (nameCounts[b] !== nameCounts[a]) {
+            return nameCounts[b] - nameCounts[a];
+        }
+        return a.localeCompare(b);
+    });
+
+    if (sortedNames.length === 0) {
+        els.statsListEl.innerHTML = '<li style="color:#888; justify-content:center;">이름을 입력하면 표시됩니다.</li>';
+        return;
+    }
+
+    sortedNames.forEach(name => {
+        const count = nameCounts[name];
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${name}</span> <span class="count">${count} 쿼터</span>`;
+        els.statsListEl.appendChild(li);
+    });
+}
+
+function updateFormationActiveClass(team) {
+    const key = (teamData.formations && teamData.formations[team] && teamData.formations[team][currentQuarter]) || null;
+    document.querySelectorAll(`.formation-btn[data-team="${team}"]:not(.copy-prev-btn):not(.auto-rotate-btn):not(.paste-roster-btn):not(.quarter-swap-btn)`).forEach(btn => {
+        if (key && btn.getAttribute('data-formation') === key) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+}
+
+function applyFormation(team, formationKey) {
+    const coords = getFormationCoords(formationKey, team);
+
+    coords.forEach((pos, index) => {
+        const pData = teamData[team][currentQuarter].starters[index];
+        pData.top = pos.top;
+        pData.left = pos.left;
+        pData.name = pos.name;
+    });
+    if (!teamData.formations) {
+        teamData.formations = { red: {}, blue: {} };
+    }
+    if (!teamData.formations[team]) teamData.formations[team] = {};
+    teamData.formations[team][currentQuarter] = formationKey;
+
+    renderPitch(team);
+    renderLists(team);
+    updateFormationActiveClass(team);
+    saveData(); // Save on formation change
+}
+
+function setupDrag(el, team) {
+    let isDragging = false;
+    let hasMoved = false; 
+    let startX, startY, initialTop, initialLeft;
+
+    const onMouseDown = (e) => {
+        if (e.type === 'touchstart') {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        } else {
+            startX = e.clientX;
+            startY = e.clientY;
+        }
+        
+        initialTop = parseFloat(el.style.top) || 0;
+        initialLeft = parseFloat(el.style.left) || 0;
+        
+        isDragging = true;
+        hasMoved = false;
+        
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('touchmove', onMouseMove, { passive: false });
+        document.addEventListener('touchend', onMouseUp);
+    };
+
+    const onMouseMove = (e) => {
+        if (!isDragging) return;
+        
+        let currentX, currentY;
+        if (e.type === 'touchmove') {
+            currentX = e.touches[0].clientX;
+            currentY = e.touches[0].clientY;
+        } else {
+            currentX = e.clientX;
+            currentY = e.clientY;
+        }
+
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+
+        if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+            hasMoved = true;
+            el.classList.add('dragging');
+            e.preventDefault(); 
+        }
+
+        if (hasMoved) {
+            const pitchRect = pitch.getBoundingClientRect();
+            let newLeft = initialLeft + (deltaX / pitchRect.width) * 100;
+            let newTop = initialTop + (deltaY / pitchRect.height) * 100;
+
+            newLeft = Math.max(0, Math.min(100, newLeft));
+            newTop = Math.max(0, Math.min(100, newTop));
+
+            el.style.left = `${newLeft}%`;
+            el.style.top = `${newTop}%`;
+        }
+    };
+
+    const onMouseUp = () => {
+        isDragging = false;
+        if (hasMoved) {
+            el.classList.remove('dragging');
+            const playerIndex = players[team].indexOf(el);
+            teamData[team][currentQuarter].starters[playerIndex].top = el.style.top;
+            teamData[team][currentQuarter].starters[playerIndex].left = el.style.left;
+            saveData(); // Save on drag drop
+        }
+        
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('touchmove', onMouseMove);
+        document.removeEventListener('touchend', onMouseUp);
+    };
+
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('touchstart', onMouseDown, { passive: false });
+}
+
+// Editable Team Titles
+document.querySelectorAll('.team-title').forEach(title => {
+    title.addEventListener('blur', (e) => {
+        const team = e.target.id.split('-')[0];
+        teamData.teamNames[team] = e.target.innerText.trim();
+        saveData();
+    });
+});
+
+// Copy Previous Quarter
+document.querySelectorAll('.copy-prev-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        if (currentQuarter <= 1) return;
+        const team = e.target.getAttribute('data-team');
+        if (confirm(`${currentQuarter-1}쿼터의 명단과 위치를 그대로 복사해오시겠습니까?`)) {
+            teamData[team][currentQuarter] = JSON.parse(JSON.stringify(teamData[team][currentQuarter - 1]));
+            if (teamData.formations && teamData.formations[team]) {
+                teamData.formations[team][currentQuarter] = teamData.formations[team][currentQuarter - 1];
+            }
+            renderPitch(team);
+            renderLists(team);
+            renderStats(team);
+            updateFormationActiveClass(team);
+            saveData();
+        }
+    });
+});
+
+// Image Export — capture all 4 quarters and merge into one composite PNG
+const exportImgBtn = document.getElementById('export-img-btn');
+
+async function captureAllQuarters() {
+    const originalQuarter = currentQuarter;
+    const originalText = exportImgBtn.innerText;
+    exportImgBtn.innerText = "⏳ 4쿼터 캡처 중...";
+    exportImgBtn.disabled = true;
+
+    // Disable player marker transitions so positions snap immediately during quarter switch
+    const playerEls = document.querySelectorAll('.player');
+    const savedTransitions = [];
+    playerEls.forEach(el => {
+        savedTransitions.push(el.style.transition);
+        el.style.transition = 'none';
+    });
+
+    try {
+        const canvases = [];
+
+        for (let q = 1; q <= 4; q++) {
+            loadQuarter(q);
+
+            const watermark = document.createElement('div');
+            watermark.style.cssText = 'position:absolute; top:8px; left:8px; z-index:100; color:#fff; background:rgba(0,0,0,0.65); padding:4px 10px; border-radius:5px; font-size:12px; font-weight:700; letter-spacing:1px;';
+            watermark.innerText = `Q${q}`;
+            pitch.appendChild(watermark);
+
+            // Wait two animation frames to ensure layout/paint is settled
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+            const canvas = await html2canvas(pitch, { backgroundColor: '#1e1e1e', scale: 2 });
+            canvases.push(canvas);
+
+            pitch.removeChild(watermark);
+        }
+
+        // Compose 2×2 grid + header
+        const w = canvases[0].width;
+        const h = canvases[0].height;
+        const gap = 18;
+        const headerH = 100;
+
+        const totalW = w * 2 + gap;
+        const totalH = headerH + h * 2 + gap * 2;
+
+        const composite = document.createElement('canvas');
+        composite.width = totalW;
+        composite.height = totalH;
+        const ctx = composite.getContext('2d');
+
+        // Background
+        ctx.fillStyle = '#121212';
+        ctx.fillRect(0, 0, totalW, totalH);
+
+        // Header — team names colored, with " vs "
+        const redName = (teamData.teamNames && teamData.teamNames.red) || '🔴 Red Team';
+        const blueName = (teamData.teamNames && teamData.teamNames.blue) || '🔵 Blue Team';
+        const redColor = (teamData.teamColors && teamData.teamColors.red) || '#e53935';
+        const blueColor = (teamData.teamColors && teamData.teamColors.blue) || '#1e88e5';
+
+        const titleFont = "bold 38px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+        ctx.font = titleFont;
+        ctx.textBaseline = 'middle';
+
+        const vsText = '  vs  ';
+        const redW = ctx.measureText(redName).width;
+        const vsW = ctx.measureText(vsText).width;
+        const blueW = ctx.measureText(blueName).width;
+        const titleTotalW = redW + vsW + blueW;
+        const titleY = Math.round(headerH / 2 - 8);
+        let x = Math.round((totalW - titleTotalW) / 2);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = redColor;
+        ctx.fillText(redName, x, titleY);
+        x += redW;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(vsText, x, titleY);
+        x += vsW;
+        ctx.fillStyle = blueColor;
+        ctx.fillText(blueName, x, titleY);
+
+        // Subtitle
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.font = "20px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+        const dateStr = new Date().toISOString().slice(0, 10);
+        ctx.fillText(`1 ~ 4쿼터 전술판 · ${dateStr}`, totalW / 2, headerH / 2 + 28);
+
+        // Pitches in 2×2
+        const pitchY1 = headerH + gap;
+        const pitchY2 = pitchY1 + h + gap;
+        ctx.drawImage(canvases[0], 0,        pitchY1);
+        ctx.drawImage(canvases[1], w + gap,  pitchY1);
+        ctx.drawImage(canvases[2], 0,        pitchY2);
+        ctx.drawImage(canvases[3], w + gap,  pitchY2);
+
+        // Trigger download
+        const link = document.createElement('a');
+        link.download = `tactical_board_${dateStr}_Q1-Q4.png`;
+        link.href = composite.toDataURL('image/png');
+        link.click();
+    } catch (err) {
+        console.error('Capture failed:', err);
+        alert('이미지 저장에 실패했습니다.\n' + (err && err.message ? err.message : ''));
+    } finally {
+        // Restore original quarter + transitions
+        loadQuarter(originalQuarter);
+        playerEls.forEach((el, i) => {
+            el.style.transition = savedTransitions[i] || '';
+        });
+        exportImgBtn.innerText = originalText;
+        exportImgBtn.disabled = false;
+    }
+}
+
+if (exportImgBtn) {
+    exportImgBtn.addEventListener('click', captureAllQuarters);
+}
+
+document.querySelectorAll('.formation-btn:not(.copy-prev-btn):not(.auto-rotate-btn):not(.paste-roster-btn):not(.quarter-swap-btn)').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const team = e.target.getAttribute('data-team');
+        applyFormation(team, e.target.getAttribute('data-formation'));
+    });
+});
+
+quarterBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const q = parseInt(e.target.getAttribute('data-quarter'));
+        loadQuarter(q);
+    });
+});
+
+// Add Reset Data button functionality if it exists
+const resetBtn = document.getElementById('reset-data-btn');
+if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+        if (confirm("모든 데이터를 초기화하시겠습니까?")) {
+            localStorage.removeItem('footballFormationData');
+            location.reload();
+        }
+    });
+}
+
+// Export / Import functionality
+const exportBtn = document.getElementById('export-btn');
+const importBtn = document.getElementById('import-btn');
+
+if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+        const jsonStr = JSON.stringify(teamData);
+        const encoded = btoa(encodeURIComponent(jsonStr));
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(encoded).then(() => {
+                alert("전술 공유 코드가 복사되었습니다!\n카카오톡에 붙여넣기 하세요.");
+            }).catch(err => {
+                prompt("아래 코드를 복사해서 공유하세요:", encoded);
+            });
+        } else {
+            prompt("아래 코드를 복사해서 공유하세요:", encoded);
+        }
+    });
+}
+
+if (importBtn) {
+    importBtn.addEventListener('click', () => {
+        const code = prompt("전달받은 공유 코드를 붙여넣어 주세요:");
+        if (!code) return;
+
+        try {
+            const decoded = decodeURIComponent(atob(code));
+            const parsedData = JSON.parse(decoded);
+
+            // Basic validation
+            if (parsedData && parsedData.red && parsedData.blue) {
+                teamData = parsedData;
+                saveData();
+                location.reload(); // Reload to apply cleanly
+            } else {
+                alert("유효하지 않은 코드입니다.");
+            }
+        } catch (e) {
+            alert("잘못된 코드 형식입니다. 전체 코드를 정확히 복사했는지 확인해주세요.");
+        }
+    });
+}
+
+/* =========================================================
+   TACTICAL DRAWING MODE (arrows on pitch)
+   ========================================================= */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const drawingLayer = document.getElementById('drawing-layer');
+const drawToggleBtn = document.getElementById('draw-toggle');
+const drawUndoBtn = document.getElementById('draw-undo');
+const drawClearBtn = document.getElementById('draw-clear');
+const drawColorInput = document.getElementById('draw-color');
+
+let drawMode = false;
+let drawingNow = false;
+let currentPoints = [];
+let currentPath = null;
+let currentGroup = null;
+
+function pointsToD(points) {
+    if (!points.length) return '';
+    return points.map((p, i) => (i === 0 ? 'M' : 'L') + ' ' + p.x.toFixed(2) + ' ' + p.y.toFixed(2)).join(' ');
+}
+
+function buildArrowhead(points, color) {
+    // Find a reference point a bit back for stable direction
+    const n = points.length;
+    if (n < 2) return null;
+    const end = points[n - 1];
+    let ref = points[n - 2];
+    // Step back until we have enough distance for direction
+    for (let i = n - 2; i >= 0; i--) {
+        const d = Math.hypot(end.x - points[i].x, end.y - points[i].y);
+        if (d >= 2) { ref = points[i]; break; }
+    }
+    const angle = Math.atan2(end.y - ref.y, end.x - ref.x);
+    const len = 3.2;
+    const spread = Math.PI / 6;
+    const x1 = end.x - len * Math.cos(angle - spread);
+    const y1 = end.y - len * Math.sin(angle - spread);
+    const x2 = end.x - len * Math.cos(angle + spread);
+    const y2 = end.y - len * Math.sin(angle + spread);
+    const polygon = document.createElementNS(SVG_NS, 'polygon');
+    polygon.setAttribute('points', `${end.x.toFixed(2)},${end.y.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)}`);
+    polygon.setAttribute('fill', color);
+    return polygon;
+}
+
+function createDrawingGroup(points, color, finalized) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('data-drawn', '1');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', pointsToD(points));
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '0.9');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    g.appendChild(path);
+    if (finalized) {
+        const head = buildArrowhead(points, color);
+        if (head) g.appendChild(head);
+    }
+    return { group: g, path };
+}
+
+function renderDrawings() {
+    drawingLayer.querySelectorAll('g[data-drawn]').forEach(g => g.remove());
+    const list = (teamData.drawings && teamData.drawings[currentQuarter]) || [];
+    list.forEach(d => {
+        const { group } = createDrawingGroup(d.points, d.color, true);
+        drawingLayer.appendChild(group);
+    });
+}
+
+function getDrawCoords(e) {
+    const rect = drawingLayer.getBoundingClientRect();
+    let clientX, clientY;
+    if (e.touches && e.touches[0]) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
+    return {
+        x: Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)),
+        y: Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100))
+    };
+}
+
+function onDrawStart(e) {
+    if (!drawMode) return;
+    e.preventDefault();
+    drawingNow = true;
+    const color = drawColorInput.value;
+    currentPoints = [getDrawCoords(e)];
+    const built = createDrawingGroup(currentPoints, color, false);
+    currentGroup = built.group;
+    currentPath = built.path;
+    drawingLayer.appendChild(currentGroup);
+}
+
+function onDrawMove(e) {
+    if (!drawMode || !drawingNow) return;
+    e.preventDefault();
+    const pt = getDrawCoords(e);
+    const last = currentPoints[currentPoints.length - 1];
+    if (Math.hypot(pt.x - last.x, pt.y - last.y) > 0.5) {
+        currentPoints.push(pt);
+        currentPath.setAttribute('d', pointsToD(currentPoints));
+    }
+}
+
+function onDrawEnd() {
+    if (!drawMode || !drawingNow) return;
+    drawingNow = false;
+    if (currentGroup) currentGroup.remove();
+    if (currentPoints.length >= 2) {
+        if (!teamData.drawings) teamData.drawings = { 1: [], 2: [], 3: [], 4: [] };
+        if (!teamData.drawings[currentQuarter]) teamData.drawings[currentQuarter] = [];
+        teamData.drawings[currentQuarter].push({
+            points: currentPoints,
+            color: drawColorInput.value
+        });
+        saveData();
+        renderDrawings();
+    }
+    currentPath = null;
+    currentGroup = null;
+    currentPoints = [];
+}
+
+if (drawToggleBtn) {
+    drawToggleBtn.addEventListener('click', () => {
+        drawMode = !drawMode;
+        drawToggleBtn.classList.toggle('active', drawMode);
+        drawToggleBtn.innerText = drawMode ? '✅ 그리기 종료' : '✏️ 그리기';
+        pitch.classList.toggle('draw-mode', drawMode);
+    });
+}
+if (drawUndoBtn) {
+    drawUndoBtn.addEventListener('click', () => {
+        const list = teamData.drawings && teamData.drawings[currentQuarter];
+        if (!list || !list.length) return;
+        list.pop();
+        saveData();
+        renderDrawings();
+    });
+}
+if (drawClearBtn) {
+    drawClearBtn.addEventListener('click', () => {
+        const list = teamData.drawings && teamData.drawings[currentQuarter];
+        if (!list || !list.length) return;
+        if (confirm(`${currentQuarter}쿼터의 전술 선을 모두 지우시겠습니까?`)) {
+            teamData.drawings[currentQuarter] = [];
+            saveData();
+            renderDrawings();
+        }
+    });
+}
+
+drawingLayer.addEventListener('mousedown', onDrawStart);
+drawingLayer.addEventListener('mousemove', onDrawMove);
+drawingLayer.addEventListener('mouseup', onDrawEnd);
+drawingLayer.addEventListener('mouseleave', onDrawEnd);
+drawingLayer.addEventListener('touchstart', onDrawStart, { passive: false });
+drawingLayer.addEventListener('touchmove', onDrawMove, { passive: false });
+drawingLayer.addEventListener('touchend', onDrawEnd);
+drawingLayer.addEventListener('touchcancel', onDrawEnd);
+
+/* =========================================================
+   TEAM COLOR PICKERS
+   ========================================================= */
+document.querySelectorAll('.team-color-picker').forEach(picker => {
+    picker.addEventListener('input', (e) => {
+        const team = e.target.getAttribute('data-team');
+        if (!teamData.teamColors) teamData.teamColors = { red: "#e53935", blue: "#1e88e5" };
+        teamData.teamColors[team] = e.target.value;
+        applyTeamColors();
+        saveData();
+    });
+});
+
+/* =========================================================
+   AUTO ROTATION (🪄 공평하게 배치)
+   ========================================================= */
+let pendingRotation = null;
+
+function suggestRotation(team) {
+    const q = currentQuarter;
+    if (q <= 1) return null;
+
+    const counts = computeQuarterRoleCounts(team);
+    const allNames = Object.keys(counts);
+    if (!allNames.length) return null;
+
+    // Sum field/gk time across Q1 .. Q(q-1)
+    const fieldBefore = {};
+    const gkBefore = {};
+    allNames.forEach(name => {
+        let f = 0, g = 0;
+        for (let i = 0; i < q - 1; i++) {
+            f += counts[name].quarters[i].field;
+            g += counts[name].quarters[i].gk;
+        }
+        fieldBefore[name] = f;
+        gkBefore[name] = g;
+    });
+
+    // Designated GK = the player who has played GK most in past quarters
+    let designatedGK = null;
+    let maxGK = 0;
+    allNames.forEach(name => {
+        if (gkBefore[name] > maxGK) {
+            maxGK = gkBefore[name];
+            designatedGK = name;
+        } else if (gkBefore[name] === maxGK && gkBefore[name] > 0 && designatedGK && name.localeCompare(designatedGK) < 0) {
+            designatedGK = name;
+        }
+    });
+
+    const formation = teamData[team][q].starters;
+    const newStarters = new Array(11).fill('');
+    const assigned = new Set();
+
+    // Step 1: Lock designated GK into the GK slot (if any)
+    if (designatedGK) {
+        formation.forEach((slot, i) => {
+            if (slot.name === 'GK' && !newStarters[i]) {
+                newStarters[i] = designatedGK;
+                assigned.add(designatedGK);
+            }
+        });
+    }
+
+    // Step 2: Sort remaining players by field time ascending; alphabetical tiebreak
+    const fieldCandidates = allNames
+        .filter(n => !assigned.has(n))
+        .sort((a, b) => {
+            if (fieldBefore[a] !== fieldBefore[b]) return fieldBefore[a] - fieldBefore[b];
+            return a.localeCompare(b);
+        });
+
+    // Step 3: Fill non-GK slots in formation order with field candidates
+    let candIdx = 0;
+    formation.forEach((slot, i) => {
+        if (newStarters[i]) return;
+        if (candIdx < fieldCandidates.length) {
+            const cand = fieldCandidates[candIdx++];
+            newStarters[i] = cand;
+            assigned.add(cand);
+        }
+    });
+
+    // Step 4: Subs — remaining players, by total time ascending
+    const totalBefore = {};
+    allNames.forEach(n => { totalBefore[n] = fieldBefore[n] + gkBefore[n]; });
+    const newSubs = allNames
+        .filter(n => !assigned.has(n))
+        .sort((a, b) => {
+            if (totalBefore[a] !== totalBefore[b]) return totalBefore[a] - totalBefore[b];
+            return a.localeCompare(b);
+        })
+        .slice(0, 5);
+
+    // For modal display: "sorted" is the left-column ranking by field time asc
+    const sorted = allNames.slice().sort((a, b) => {
+        if (fieldBefore[a] !== fieldBefore[b]) return fieldBefore[a] - fieldBefore[b];
+        return a.localeCompare(b);
+    });
+    const played = {};
+    allNames.forEach(n => { played[n] = fieldBefore[n]; }); // shown as "필드 X쿼터" in modal
+
+    return {
+        newStarters,
+        newSubs,
+        played,
+        sorted,
+        designatedGK,
+        gkBefore,
+        fieldBefore
+    };
+}
+
+function openRotationModal(team) {
+    const result = suggestRotation(team);
+    const modal = document.getElementById('rotation-modal');
+    const title = document.getElementById('rotation-title');
+    const intro = document.getElementById('rotation-intro');
+    const body = document.getElementById('rotation-body');
+    const applyBtn = document.getElementById('rotation-apply');
+    const teamName = (teamData.teamNames && teamData.teamNames[team]) || team;
+    const teamColor = (teamData.teamColors && teamData.teamColors[team]) || (team === 'red' ? '#e53935' : '#1e88e5');
+    const q = currentQuarter;
+
+    title.innerHTML = `🪄 공평하게 배치 — <span style="color:${teamColor};">${teamName}</span> · ${q}쿼터`;
+
+    body.innerHTML = '';
+    pendingRotation = null;
+
+    if (!result) {
+        intro.innerText = '';
+        body.innerHTML = '<div class="rotation-empty">입력된 선수 이름이 없어 제안할 수 없습니다.<br>1쿼터 명단을 먼저 작성해주세요.</div>';
+        applyBtn.style.display = 'none';
+        modal.classList.add('open');
+        return;
+    }
+
+    const totalFieldSum = result.sorted.reduce((a, n) => a + (result.fieldBefore[n] || 0), 0);
+    if (totalFieldSum === 0 && !result.designatedGK) {
+        intro.innerText = '⚠️ 이전 쿼터에 입력된 출전 기록이 없어 모두 0쿼터로 간주됩니다. 명단 입력 후 다시 시도하세요.';
+    } else {
+        const gkNote = result.designatedGK
+            ? ` 🥅 골키퍼 <strong>${result.designatedGK}</strong> 는 이전 쿼터 출전 기록에 따라 GK 슬롯에 자동 고정됩니다.`
+            : '';
+        intro.innerHTML = `📊 1~${q - 1}쿼터 누적 <strong>필드 출전 시간</strong>이 적은 선수 순으로 ${q}쿼터 라인업을 제안합니다.${gkNote}`;
+    }
+    applyBtn.style.display = 'inline-block';
+    pendingRotation = { team, newStarters: result.newStarters, newSubs: result.newSubs };
+
+    const currentStarters = teamData[team][q].starters.map(s => (s.customName || '').trim());
+    const currentSubs = teamData[team][q].subs.map(s => (s.customName || '').trim());
+
+    const grid = document.createElement('div');
+    grid.className = 'rotation-grid';
+
+    // LEFT: Field time ranking (sorted ascending = priority)
+    const left = document.createElement('div');
+    left.className = 'rotation-col';
+    left.innerHTML = `<h4>📊 1~${q - 1}쿼터 누적 (필드 적은 순)</h4>`;
+    result.sorted.forEach(name => {
+        const fieldP = result.fieldBefore[name] || 0;
+        const gkP = result.gkBefore[name] || 0;
+        const isGK = name === result.designatedGK;
+        const warn = !isGK && fieldP === 0 && totalFieldSum > 0;
+        const row = document.createElement('div');
+        row.className = 'rotation-row' + (warn ? ' rot-warn' : '');
+        const tag = isGK ? '🥅' : (warn ? '🚨' : '');
+        const meta = isGK
+            ? `필드 ${fieldP}Q · GK ${gkP}Q`
+            : (gkP > 0 ? `필드 ${fieldP}Q · GK ${gkP}Q` : `필드 ${fieldP}쿼터`);
+        row.innerHTML = `
+            <span class="rot-pos">${tag}</span>
+            <span class="rot-name">${name}</span>
+            <span class="rot-meta">${meta}</span>
+        `;
+        left.appendChild(row);
+    });
+
+    // RIGHT: Proposed lineup
+    const right = document.createElement('div');
+    right.className = 'rotation-col';
+    right.innerHTML = `<h4>🎯 ${q}쿼터 제안 명단</h4>`;
+
+    const startersLabel = document.createElement('div');
+    startersLabel.className = 'rot-subheader';
+    startersLabel.innerText = '선발 XI';
+    right.appendChild(startersLabel);
+
+    teamData[team][q].starters.forEach((s, i) => {
+        const newName = result.newStarters[i] || '';
+        const changed = newName !== currentStarters[i] && newName !== '';
+        const isGKSlot = s.name === 'GK';
+        const isLockedGK = isGKSlot && newName && newName === result.designatedGK;
+        const row = document.createElement('div');
+        row.className = 'rotation-row' + (changed ? ' rot-changed' : '');
+        const displayName = newName || '<em style="opacity:0.35">(비어있음)</em>';
+        const meta = isLockedGK ? '🥅 고정' : (changed ? '🔄' : '');
+        row.innerHTML = `
+            <span class="rot-pos">${s.name}</span>
+            <span class="rot-name">${displayName}</span>
+            <span class="rot-meta">${meta}</span>
+        `;
+        right.appendChild(row);
+    });
+
+    const subsLabel = document.createElement('div');
+    subsLabel.className = 'rot-subheader';
+    subsLabel.innerText = '교체 명단';
+    right.appendChild(subsLabel);
+
+    for (let i = 0; i < 5; i++) {
+        const newName = result.newSubs[i] || '';
+        const changed = newName !== currentSubs[i] && newName !== '';
+        const row = document.createElement('div');
+        row.className = 'rotation-row' + (changed ? ' rot-changed' : '');
+        const displayName = newName || '<em style="opacity:0.35">(비어있음)</em>';
+        row.innerHTML = `
+            <span class="rot-pos">SUB ${i + 1}</span>
+            <span class="rot-name">${displayName}</span>
+            <span class="rot-meta">${changed ? '🔄' : ''}</span>
+        `;
+        right.appendChild(row);
+    }
+
+    grid.appendChild(left);
+    grid.appendChild(right);
+    body.appendChild(grid);
+    modal.classList.add('open');
+}
+
+function applyRotation() {
+    if (!pendingRotation) return;
+    const { team, newStarters, newSubs } = pendingRotation;
+    const q = currentQuarter;
+    const data = teamData[team][q];
+
+    data.starters.forEach((s, i) => {
+        s.customName = newStarters[i] || '';
+        s.subInName = '';
+    });
+    data.subs.forEach((s, i) => {
+        s.customName = newSubs[i] || '';
+    });
+
+    saveData();
+    renderPitch(team);
+    renderLists(team);
+    renderStats(team);
+    document.getElementById('rotation-modal').classList.remove('open');
+    pendingRotation = null;
+}
+
+document.querySelectorAll('.auto-rotate-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        if (currentQuarter <= 1) return;
+        const team = e.currentTarget.getAttribute('data-team');
+        openRotationModal(team);
+    });
+});
+
+const rotationModal = document.getElementById('rotation-modal');
+const rotationCloseBtn = document.getElementById('rotation-close');
+const rotationCancelBtn = document.getElementById('rotation-cancel');
+const rotationApplyBtn = document.getElementById('rotation-apply');
+
+if (rotationCloseBtn) rotationCloseBtn.addEventListener('click', () => rotationModal.classList.remove('open'));
+if (rotationCancelBtn) rotationCancelBtn.addEventListener('click', () => rotationModal.classList.remove('open'));
+if (rotationApplyBtn) rotationApplyBtn.addEventListener('click', applyRotation);
+if (rotationModal) {
+    rotationModal.addEventListener('click', (e) => {
+        if (e.target === rotationModal) rotationModal.classList.remove('open');
+    });
+}
+
+/* (Master roster feature removed) */
+
+/* =========================================================
+   QUARTER-LEVEL ROSTER SWAP (🔁 쿼터 인원 교체)
+   ========================================================= */
+let quarterSwapTeam = null;
+
+function swapQuarterRosters(teams, qa, qb) {
+    if (qa === qb) return;
+    teams.forEach(t => {
+        const tempData = teamData[t][qa];
+        teamData[t][qa] = teamData[t][qb];
+        teamData[t][qb] = tempData;
+        if (teamData.formations && teamData.formations[t]) {
+            const tempForm = teamData.formations[t][qa];
+            teamData.formations[t][qa] = teamData.formations[t][qb];
+            teamData.formations[t][qb] = tempForm;
+        }
+    });
+    // Drawings get swapped only when both teams swap (drawings are quarter-shared, not team-specific)
+    if (teams.length === 2 && teamData.drawings) {
+        const tempDrawings = teamData.drawings[qa];
+        teamData.drawings[qa] = teamData.drawings[qb];
+        teamData.drawings[qb] = tempDrawings;
+    }
+    saveData();
+    swapState = { red: null, blue: null };
+    ['red', 'blue'].forEach(t => {
+        renderPitch(t);
+        renderLists(t);
+        renderStats(t);
+        updateFormationActiveClass(t);
+    });
+    renderDrawings();
+}
+
+function openQuarterSwapModal(team) {
+    quarterSwapTeam = team;
+    const teamName = (teamData.teamNames && teamData.teamNames[team]) || team;
+    const teamColor = (teamData.teamColors && teamData.teamColors[team]) || (team === 'red' ? '#e53935' : '#1e88e5');
+    const otherTeam = team === 'red' ? 'blue' : 'red';
+    const otherName = (teamData.teamNames && teamData.teamNames[otherTeam]) || otherTeam;
+
+    const titleEl = document.getElementById('quarter-swap-title');
+    const introEl = document.getElementById('quarter-swap-intro');
+    const buttonsEl = document.getElementById('quarter-swap-buttons');
+    const bothChk = document.getElementById('quarter-swap-both');
+    const optionLabel = bothChk ? bothChk.parentElement : null;
+
+    titleEl.innerHTML = `🔁 쿼터 인원 교체 — <span style="color:${teamColor};">${teamName}</span>`;
+    introEl.innerHTML = `현재 <strong>${currentQuarter}쿼터</strong>의 명단(선발 + 교체)과 포메이션을 어느 쿼터와 통째로 맞바꿀까요?<br>출전 통계도 자동 재계산됩니다.`;
+    if (optionLabel) {
+        const span = optionLabel.querySelector('span');
+        if (span) span.innerText = `${otherName} 도 같은 쿼터끼리 함께 교체 (전술 작전판도 이동)`;
+    }
+    if (bothChk) bothChk.checked = false;
+
+    buttonsEl.innerHTML = '';
+    for (let q = 1; q <= 4; q++) {
+        if (q === currentQuarter) continue;
+        const btn = document.createElement('button');
+        btn.className = 'quarter-swap-target-btn';
+        btn.type = 'button';
+        btn.innerText = `${currentQuarter}Q ↔ ${q}Q`;
+        btn.addEventListener('click', () => {
+            const includeBoth = bothChk && bothChk.checked;
+            const teams = includeBoth ? ['red', 'blue'] : [team];
+            const teamMsg = includeBoth ? '양 팀 모두' : teamName;
+            const drawingMsg = includeBoth ? '\n전술 작전판도 함께 이동됩니다.' : '';
+            if (confirm(`${teamMsg}의 ${currentQuarter}쿼터 ↔ ${q}쿼터 명단과 포메이션을 통째로 교체합니다.${drawingMsg}\n진행할까요?`)) {
+                swapQuarterRosters(teams, currentQuarter, q);
+                document.getElementById('quarter-swap-modal').classList.remove('open');
+                quarterSwapTeam = null;
+            }
+        });
+        buttonsEl.appendChild(btn);
+    }
+
+    document.getElementById('quarter-swap-modal').classList.add('open');
+}
+
+document.querySelectorAll('.quarter-swap-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const team = e.currentTarget.getAttribute('data-team');
+        openQuarterSwapModal(team);
+    });
+});
+
+const quarterSwapModal = document.getElementById('quarter-swap-modal');
+const quarterSwapCloseBtn = document.getElementById('quarter-swap-close');
+const quarterSwapCancelBtn = document.getElementById('quarter-swap-cancel');
+if (quarterSwapCloseBtn) quarterSwapCloseBtn.addEventListener('click', () => quarterSwapModal.classList.remove('open'));
+if (quarterSwapCancelBtn) quarterSwapCancelBtn.addEventListener('click', () => quarterSwapModal.classList.remove('open'));
+if (quarterSwapModal) {
+    quarterSwapModal.addEventListener('click', (e) => {
+        if (e.target === quarterSwapModal) quarterSwapModal.classList.remove('open');
+    });
+}
+
+/* =========================================================
+   BULK ROSTER PASTE (📋 일괄 입력)
+   ========================================================= */
+let pasteTeam = null;
+
+function parseRoster(text) {
+    if (!text) return [];
+    const lines = text.split(/\r?\n/);
+    const out = [];
+    for (let raw of lines) {
+        let line = (raw || '').trim();
+        if (!line) continue;
+        // Iteratively strip leading bullets / numbers
+        let prev;
+        do {
+            prev = line;
+            line = line
+                .replace(/^[-*•·>~]\s*/, '')                                   // bullets
+                .replace(/^\(?\s*\d+\s*\)?\s*[\.\)\:번]?\s*/, '')              // 1. / 1) / (1) / 1번
+                .trim();
+        } while (line !== prev && line.length);
+        if (line) out.push(line);
+        if (out.length >= 16) break;
+    }
+    return out;
+}
+
+function openPasteModal(team) {
+    pasteTeam = team;
+    const teamName = (teamData.teamNames && teamData.teamNames[team]) || team;
+    const teamColor = (teamData.teamColors && teamData.teamColors[team]) || (team === 'red' ? '#e53935' : '#1e88e5');
+    document.getElementById('paste-title').innerHTML = `📋 명단 일괄 붙여넣기 — <span style="color:${teamColor};">${teamName}</span>`;
+
+    const textarea = document.getElementById('paste-textarea');
+    textarea.value = '';
+    document.querySelector('input[name="paste-scope"][value="current"]').checked = true;
+
+    renderPastePreview();
+    document.getElementById('paste-modal').classList.add('open');
+    setTimeout(() => textarea.focus(), 60);
+}
+
+function renderPastePreview() {
+    const textarea = document.getElementById('paste-textarea');
+    const previewEl = document.getElementById('paste-preview');
+    const countInfo = document.getElementById('paste-count-info');
+    const text = textarea.value;
+    const names = parseRoster(text);
+    const totalLines = text.split(/\r?\n/).filter(l => l.trim()).length;
+
+    countInfo.innerText = `인식된 이름: ${names.length}명${totalLines > 16 ? ` (입력 ${totalLines}줄 중 앞 16개만)` : ''}`;
+
+    previewEl.innerHTML = '';
+
+    if (!names.length) {
+        previewEl.innerHTML = '<div class="paste-preview-empty">텍스트를 입력하면 미리보기가 표시됩니다.</div>';
+        return;
+    }
+
+    if (!pasteTeam) return;
+    const q = currentQuarter;
+    const starters = teamData[pasteTeam][q].starters;
+
+    const startersLabel = document.createElement('div');
+    startersLabel.className = 'rot-subheader';
+    startersLabel.innerText = '선발 XI';
+    previewEl.appendChild(startersLabel);
+
+    for (let i = 0; i < 11; i++) {
+        const row = document.createElement('div');
+        row.className = 'rotation-row' + (names[i] ? ' rot-changed' : '');
+        const name = names[i] || '';
+        row.innerHTML = `
+            <span class="rot-pos">${starters[i].name}</span>
+            <span class="rot-name">${name || '<em style="opacity:0.35">(현재 값 유지)</em>'}</span>
+            <span class="rot-meta">${name ? '✏️' : ''}</span>
+        `;
+        previewEl.appendChild(row);
+    }
+
+    const subsLabel = document.createElement('div');
+    subsLabel.className = 'rot-subheader';
+    subsLabel.innerText = '교체 명단';
+    previewEl.appendChild(subsLabel);
+
+    for (let i = 0; i < 5; i++) {
+        const idx = 11 + i;
+        const row = document.createElement('div');
+        row.className = 'rotation-row' + (names[idx] ? ' rot-changed' : '');
+        const name = names[idx] || '';
+        row.innerHTML = `
+            <span class="rot-pos">SUB ${i + 1}</span>
+            <span class="rot-name">${name || '<em style="opacity:0.35">(현재 값 유지)</em>'}</span>
+            <span class="rot-meta">${name ? '✏️' : ''}</span>
+        `;
+        previewEl.appendChild(row);
+    }
+
+    if (totalLines > 16) {
+        const warn = document.createElement('div');
+        warn.className = 'paste-overflow-warn';
+        warn.innerText = `⚠️ 입력된 ${totalLines}줄 중 앞 16명만 사용됩니다. 나머지는 무시됩니다.`;
+        previewEl.appendChild(warn);
+    }
+}
+
+function applyPaste() {
+    if (!pasteTeam) return;
+    const text = document.getElementById('paste-textarea').value;
+    const names = parseRoster(text);
+    if (!names.length) {
+        alert('입력된 이름이 없습니다.');
+        return;
+    }
+
+    const scope = (document.querySelector('input[name="paste-scope"]:checked') || {}).value || 'current';
+    const quarters = scope === 'all' ? [1, 2, 3, 4] : [currentQuarter];
+
+    quarters.forEach(q => {
+        const data = teamData[pasteTeam][q];
+        names.forEach((name, idx) => {
+            if (idx < 11) {
+                data.starters[idx].customName = name;
+                data.starters[idx].subInName = '';
+            } else if (idx < 16) {
+                data.subs[idx - 11].customName = name;
+            }
+        });
+    });
+
+    saveData();
+    renderPitch(pasteTeam);
+    renderLists(pasteTeam);
+    renderStats(pasteTeam);
+
+    document.getElementById('paste-modal').classList.remove('open');
+    pasteTeam = null;
+}
+
+document.querySelectorAll('.paste-roster-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const team = e.currentTarget.getAttribute('data-team');
+        openPasteModal(team);
+    });
+});
+
+const pasteTextareaEl = document.getElementById('paste-textarea');
+const pasteModal = document.getElementById('paste-modal');
+const pasteCloseBtn = document.getElementById('paste-close');
+const pasteCancelBtn = document.getElementById('paste-cancel');
+const pasteApplyBtn = document.getElementById('paste-apply');
+const pasteClearBtn = document.getElementById('paste-clear');
+const pasteFromClipBtn = document.getElementById('paste-from-clipboard');
+
+if (pasteTextareaEl) pasteTextareaEl.addEventListener('input', renderPastePreview);
+if (pasteCloseBtn) pasteCloseBtn.addEventListener('click', () => pasteModal.classList.remove('open'));
+if (pasteCancelBtn) pasteCancelBtn.addEventListener('click', () => pasteModal.classList.remove('open'));
+if (pasteApplyBtn) pasteApplyBtn.addEventListener('click', applyPaste);
+if (pasteClearBtn) pasteClearBtn.addEventListener('click', () => {
+    pasteTextareaEl.value = '';
+    renderPastePreview();
+    pasteTextareaEl.focus();
+});
+if (pasteFromClipBtn) pasteFromClipBtn.addEventListener('click', async () => {
+    try {
+        if (!navigator.clipboard || !navigator.clipboard.readText) throw new Error('no-clipboard');
+        const text = await navigator.clipboard.readText();
+        if (!text) {
+            alert('클립보드가 비어 있습니다.');
+            return;
+        }
+        pasteTextareaEl.value = text;
+        renderPastePreview();
+    } catch (e) {
+        alert('클립보드 접근 권한이 없습니다.\n텍스트박스에 직접 붙여넣기(Ctrl+V) 해주세요.');
+    }
+});
+if (pasteModal) {
+    pasteModal.addEventListener('click', (e) => {
+        if (e.target === pasteModal) pasteModal.classList.remove('open');
+    });
+}
+
+document.querySelectorAll('input[name="paste-scope"]').forEach(r => {
+    r.addEventListener('change', renderPastePreview);
+});
+
+/* =========================================================
+   PLAYING TIME SUMMARY REPORT (modal)
+   ========================================================= */
+const summaryBtn = document.getElementById('summary-btn');
+const summaryModal = document.getElementById('summary-modal');
+const summaryClose = document.getElementById('summary-close');
+const summaryBody = document.getElementById('summary-body');
+
+function computeQuarterCounts(team) {
+    const stats = {};
+    for (let q = 1; q <= 4; q++) {
+        const data = teamData[team][q];
+        data.starters.forEach(s => {
+            const starter = (s.customName || '').trim();
+            const subIn = (s.subInName || '').trim();
+            if (subIn) {
+                if (starter) {
+                    if (!stats[starter]) stats[starter] = [0, 0, 0, 0];
+                    stats[starter][q - 1] += 0.5;
+                }
+                if (!stats[subIn]) stats[subIn] = [0, 0, 0, 0];
+                stats[subIn][q - 1] += 0.5;
+            } else if (starter) {
+                if (!stats[starter]) stats[starter] = [0, 0, 0, 0];
+                stats[starter][q - 1] += 1;
+            }
+        });
+        data.subs.forEach(s => {
+            const name = (s.customName || '').trim();
+            if (name && !stats[name]) stats[name] = [0, 0, 0, 0];
+        });
+    }
+    return stats;
+}
+
+// Role-aware: tracks each player's GK time vs field time per quarter.
+// Returns { name: { quarters: [{gk, field}, ...x4], gkTotal, fieldTotal } }
+function computeQuarterRoleCounts(team) {
+    const stats = {};
+    const ensure = (name) => {
+        if (!stats[name]) {
+            stats[name] = {
+                quarters: [
+                    { gk: 0, field: 0 },
+                    { gk: 0, field: 0 },
+                    { gk: 0, field: 0 },
+                    { gk: 0, field: 0 }
+                ],
+                gkTotal: 0,
+                fieldTotal: 0
+            };
+        }
+        return stats[name];
+    };
+    for (let q = 1; q <= 4; q++) {
+        const data = teamData[team][q];
+        data.starters.forEach(s => {
+            const isGK = s.name === 'GK';
+            const roleKey = isGK ? 'gk' : 'field';
+            const totalKey = isGK ? 'gkTotal' : 'fieldTotal';
+            const starter = (s.customName || '').trim();
+            const subIn = (s.subInName || '').trim();
+            if (subIn) {
+                if (starter) {
+                    const e = ensure(starter);
+                    e.quarters[q - 1][roleKey] += 0.5;
+                    e[totalKey] += 0.5;
+                }
+                const eSub = ensure(subIn);
+                eSub.quarters[q - 1][roleKey] += 0.5;
+                eSub[totalKey] += 0.5;
+            } else if (starter) {
+                const e = ensure(starter);
+                e.quarters[q - 1][roleKey] += 1;
+                e[totalKey] += 1;
+            }
+        });
+        data.subs.forEach(s => {
+            const name = (s.customName || '').trim();
+            if (name) ensure(name);
+        });
+    }
+    return stats;
+}
+
+function renderSummary() {
+    summaryBody.innerHTML = '';
+    ['red', 'blue'].forEach(team => {
+        const counts = computeQuarterRoleCounts(team);
+        const allNames = Object.keys(counts);
+
+        const teamColor = (teamData.teamColors && teamData.teamColors[team]) || (team === 'red' ? '#e53935' : '#1e88e5');
+        const teamName = (teamData.teamNames && teamData.teamNames[team]) || (team === 'red' ? '🔴 Red Team' : '🔵 Blue Team');
+
+        const section = document.createElement('div');
+        section.className = 'summary-team';
+        const header = document.createElement('h3');
+        header.style.color = teamColor;
+        header.innerText = teamName;
+        section.appendChild(header);
+
+        if (!allNames.length) {
+            const empty = document.createElement('div');
+            empty.className = 'summary-empty';
+            empty.innerText = '이름을 입력한 선수가 없습니다.';
+            section.appendChild(empty);
+            summaryBody.appendChild(section);
+            return;
+        }
+
+        // ----- 🥅 Goalkeeper section -----
+        const gkPlayers = allNames
+            .filter(n => counts[n].gkTotal > 0)
+            .sort((a, b) => {
+                if (counts[b].gkTotal !== counts[a].gkTotal) return counts[b].gkTotal - counts[a].gkTotal;
+                return a.localeCompare(b);
+            });
+
+        if (gkPlayers.length) {
+            const gkLabel = document.createElement('div');
+            gkLabel.className = 'rot-subheader';
+            gkLabel.innerText = '🥅 골키퍼 (출전 균형 예외)';
+            section.appendChild(gkLabel);
+
+            const gkTable = document.createElement('table');
+            gkTable.className = 'summary-table';
+            gkTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>선수</th>
+                        <th>1Q</th>
+                        <th>2Q</th>
+                        <th>3Q</th>
+                        <th>4Q</th>
+                        <th>GK 합</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            const gkBody = gkTable.querySelector('tbody');
+            gkPlayers.forEach(name => {
+                const stat = counts[name];
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${name}</td>
+                    <td>${stat.quarters[0].gk || '-'}</td>
+                    <td>${stat.quarters[1].gk || '-'}</td>
+                    <td>${stat.quarters[2].gk || '-'}</td>
+                    <td>${stat.quarters[3].gk || '-'}</td>
+                    <td class="total-cell">${stat.gkTotal}</td>
+                `;
+                gkBody.appendChild(tr);
+            });
+            section.appendChild(gkTable);
+        }
+
+        // ----- ⚽ Field player section -----
+        // Includes any player who has field time, plus any pure-roster player (gkTotal=0, fieldTotal=0) so they show with 🚨.
+        const fieldPlayers = allNames
+            .filter(n => counts[n].fieldTotal > 0 || counts[n].gkTotal === 0)
+            .sort((a, b) => {
+                if (counts[a].fieldTotal !== counts[b].fieldTotal) return counts[a].fieldTotal - counts[b].fieldTotal;
+                return a.localeCompare(b);
+            });
+
+        if (fieldPlayers.length) {
+            const fieldLabel = document.createElement('div');
+            fieldLabel.className = 'rot-subheader';
+            fieldLabel.innerText = '⚽ 필드 플레이어 (출전 적은 순)';
+            section.appendChild(fieldLabel);
+
+            let warnCount = 0;
+            const fieldTable = document.createElement('table');
+            fieldTable.className = 'summary-table';
+            fieldTable.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>선수</th>
+                        <th>1Q</th>
+                        <th>2Q</th>
+                        <th>3Q</th>
+                        <th>4Q</th>
+                        <th>필드 합</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            const fieldBody = fieldTable.querySelector('tbody');
+            fieldPlayers.forEach(name => {
+                const stat = counts[name];
+                const tr = document.createElement('tr');
+                if (stat.fieldTotal <= 1) {
+                    tr.classList.add('summary-row-warn');
+                    warnCount++;
+                }
+                tr.innerHTML = `
+                    <td>${name}</td>
+                    <td>${stat.quarters[0].field || '-'}</td>
+                    <td>${stat.quarters[1].field || '-'}</td>
+                    <td>${stat.quarters[2].field || '-'}</td>
+                    <td>${stat.quarters[3].field || '-'}</td>
+                    <td class="total-cell">${stat.fieldTotal}</td>
+                `;
+                fieldBody.appendChild(tr);
+            });
+            section.appendChild(fieldTable);
+
+            if (warnCount > 0) {
+                const note = document.createElement('div');
+                note.className = 'summary-legend';
+                note.style.color = '#ff8a80';
+                note.style.textAlign = 'left';
+                note.innerText = `⚠️ 필드 ${warnCount}명이 1쿼터 이하 출전. 다음 경기 우선 기용 권장.`;
+                section.appendChild(note);
+            }
+        }
+
+        summaryBody.appendChild(section);
+    });
+}
+
+if (summaryBtn) {
+    summaryBtn.addEventListener('click', () => {
+        renderSummary();
+        summaryModal.classList.add('open');
+    });
+}
+if (summaryClose) {
+    summaryClose.addEventListener('click', () => {
+        summaryModal.classList.remove('open');
+    });
+}
+if (summaryModal) {
+    summaryModal.addEventListener('click', (e) => {
+        if (e.target === summaryModal) summaryModal.classList.remove('open');
+    });
+}
+
+// Modal-open body class fallback (for browsers without CSS :has())
+(function() {
+    const update = () => {
+        const anyOpen = document.querySelector('.modal-overlay.open');
+        document.body.classList.toggle('modal-open', !!anyOpen);
+    };
+    const obs = new MutationObserver(update);
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+        obs.observe(m, { attributes: true, attributeFilter: ['class'] });
+    });
+    update();
+})();
+
+initPitch();
+
+</script>
+</body>
+</html>
