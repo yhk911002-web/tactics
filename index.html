@@ -306,6 +306,42 @@ body.match-mode .quarter-swap-options { display: none !important; }
     border-color: #4caf50;
 }
 
+.quarter-btn.quarter-extra {
+    border-color: rgba(76,175,80,0.5);
+    border-style: dashed;
+}
+.quarter-btn.quarter-extra.active {
+    border-style: solid;
+}
+
+.quarter-meta-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px dashed rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.7);
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.78rem;
+    transition: 0.2s;
+    white-space: nowrap;
+}
+.quarter-meta-btn:hover {
+    background: rgba(76,175,80,0.18);
+    color: #fff;
+    border-color: #66bb6a;
+}
+.quarter-meta-btn.quarter-remove-btn {
+    border: 1px solid rgba(244,67,54,0.4);
+    color: #ff8a80;
+    border-style: solid;
+}
+.quarter-meta-btn.quarter-remove-btn:hover {
+    background: rgba(244,67,54,0.25);
+    color: #fff;
+    border-color: #ef5350;
+}
+
 /* Sidebars */
 .sidebar {
     flex: 1;
@@ -1041,6 +1077,9 @@ body.match-mode .quarter-swap-options { display: none !important; }
                     <button class="quarter-btn" data-quarter="2">2 Quarter</button>
                     <button class="quarter-btn" data-quarter="3">3 Quarter</button>
                     <button class="quarter-btn" data-quarter="4">4 Quarter</button>
+                    <button class="quarter-btn quarter-extra" data-quarter="5" id="q5-tab" style="display:none;">5 Quarter</button>
+                    <button class="quarter-meta-btn" id="q5-add-btn" type="button" title="5쿼터 추가">+ 5Q</button>
+                    <button class="quarter-meta-btn quarter-remove-btn" id="q5-remove-btn" type="button" title="5쿼터 제거 (데이터 삭제)" style="display:none;">✕ 5Q</button>
                 </div>
                 <p class="hint-text">
                     선수 드래그로 위치 이동 · 🔄 같은 쿼터 내 두 슬롯 클릭으로 교체<br>
@@ -1271,6 +1310,7 @@ let currentQuarter = 1;
 
 let teamData = {
     gameMode: 'intramural', // 'intramural' (자체전: 2팀) or 'match' (매치전: 1팀 — 빨강만)
+    hasQ5: false, // Optional 5th quarter (toggleable)
     teamNames: { red: "🔴 Red Team", blue: "🔵 Blue Team" },
     teamColors: { red: "#e53935", blue: "#1e88e5" },
     drawings: { 1: [], 2: [], 3: [], 4: [] },
@@ -1364,6 +1404,11 @@ function loadData() {
             if (teamData.gameMode !== 'match' && teamData.gameMode !== 'intramural') {
                 teamData.gameMode = 'intramural';
             }
+            // Q5 migration: detect existing Q5 data, otherwise default to false
+            if (typeof teamData.hasQ5 !== 'boolean') {
+                teamData.hasQ5 = !!(teamData.red && teamData.red[5]) || !!(teamData.blue && teamData.blue[5]);
+            }
+            if (teamData.hasQ5) ensureQuarter5Data();
             return true;
         }
     } catch(e) {
@@ -1384,6 +1429,80 @@ function applyTeamColors() {
 
 function activeTeams() {
     return teamData.gameMode === 'match' ? ['red'] : ['red', 'blue'];
+}
+
+function getQuarterCount() {
+    return teamData.hasQ5 ? 5 : 4;
+}
+
+function eachQuarter(fn) {
+    const count = getQuarterCount();
+    for (let q = 1; q <= count; q++) fn(q);
+}
+
+function applyQ5State() {
+    const has = !!teamData.hasQ5;
+    const q5Tab = document.getElementById('q5-tab');
+    const q5AddBtn = document.getElementById('q5-add-btn');
+    const q5RemoveBtn = document.getElementById('q5-remove-btn');
+    if (q5Tab) q5Tab.style.display = has ? 'inline-block' : 'none';
+    if (q5AddBtn) q5AddBtn.style.display = has ? 'none' : 'inline-block';
+    if (q5RemoveBtn) q5RemoveBtn.style.display = has ? 'inline-block' : 'none';
+}
+
+function buildDefaultQuarter(team) {
+    const coords = getFormationCoords('4-4-2', team);
+    return {
+        starters: coords.map((c, idx) => ({
+            id: formations['4-4-2'][idx].id,
+            name: c.name,
+            top: c.top,
+            left: c.left,
+            customName: '',
+            subInName: ''
+        })),
+        subs: createSubs()
+    };
+}
+
+function ensureQuarter5Data() {
+    if (!teamData.red[5]) teamData.red[5] = buildDefaultQuarter('red');
+    if (!teamData.blue[5]) teamData.blue[5] = buildDefaultQuarter('blue');
+    if (!teamData.formations) teamData.formations = { red: {}, blue: {} };
+    if (!teamData.formations.red) teamData.formations.red = {};
+    if (!teamData.formations.blue) teamData.formations.blue = {};
+    if (!teamData.formations.red[5]) teamData.formations.red[5] = '4-4-2';
+    if (!teamData.formations.blue[5]) teamData.formations.blue[5] = '4-4-2';
+    if (!teamData.drawings) teamData.drawings = {};
+    if (!teamData.drawings[5]) teamData.drawings[5] = [];
+}
+
+function addQuarter5() {
+    teamData.hasQ5 = true;
+    ensureQuarter5Data();
+    applyQ5State();
+    saveData();
+    loadQuarter(5);
+}
+
+function removeQuarter5() {
+    if (!confirm('5쿼터 데이터(명단·포메이션·작전판)가 모두 삭제됩니다. 계속할까요?')) return;
+    teamData.hasQ5 = false;
+    if (teamData.red) delete teamData.red[5];
+    if (teamData.blue) delete teamData.blue[5];
+    if (teamData.formations) {
+        if (teamData.formations.red) delete teamData.formations.red[5];
+        if (teamData.formations.blue) delete teamData.formations.blue[5];
+    }
+    if (teamData.drawings) delete teamData.drawings[5];
+    applyQ5State();
+    saveData();
+    if (currentQuarter === 5) {
+        loadQuarter(4);
+    } else {
+        // Stats may have changed; refresh views
+        ['red', 'blue'].forEach(t => renderStats(t));
+    }
 }
 
 function applyGameMode(mode) {
@@ -1429,6 +1548,7 @@ function initPitch() {
 
     applyTeamColors();
     applyGameMode(teamData.gameMode || 'intramural');
+    applyQ5State();
 
     ['red', 'blue'].forEach(team => {
         document.getElementById(`${team}-team-title`).innerText = teamData.teamNames[team];
@@ -1609,8 +1729,9 @@ function handleSwapClick(team, type, index) {
 
 function renderStats(team) {
     const nameCounts = {};
-    
-    for (let q = 1; q <= 4; q++) {
+    const qcount = getQuarterCount();
+    for (let q = 1; q <= qcount; q++) {
+        if (!teamData[team][q]) continue;
         teamData[team][q].starters.forEach(s => {
             const sName = s.customName.trim();
             const subName = (s.subInName || '').trim();
@@ -1813,8 +1934,9 @@ async function captureAllQuarters() {
 
     try {
         const canvases = [];
+        const qcount = getQuarterCount();
 
-        for (let q = 1; q <= 4; q++) {
+        for (let q = 1; q <= qcount; q++) {
             loadQuarter(q);
 
             const watermark = document.createElement('div');
@@ -1831,14 +1953,16 @@ async function captureAllQuarters() {
             pitch.removeChild(watermark);
         }
 
-        // Compose 2×2 grid + header
+        // Compose grid + header (2 cols, ceil(qcount/2) rows)
         const w = canvases[0].width;
         const h = canvases[0].height;
         const gap = 18;
         const headerH = 100;
+        const cols = 2;
+        const rows = Math.ceil(qcount / cols);
 
-        const totalW = w * 2 + gap;
-        const totalH = headerH + h * 2 + gap * 2;
+        const totalW = w * cols + gap * (cols - 1);
+        const totalH = headerH + h * rows + gap * rows;
 
         const composite = document.createElement('canvas');
         composite.width = totalW;
@@ -1891,21 +2015,29 @@ async function captureAllQuarters() {
         ctx.font = "20px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
         const dateStr = new Date().toISOString().slice(0, 10);
         const subtitle = matchMode
-            ? `매치전 · 1 ~ 4쿼터 전술판 · ${dateStr}`
-            : `1 ~ 4쿼터 전술판 · ${dateStr}`;
+            ? `매치전 · 1 ~ ${qcount}쿼터 전술판 · ${dateStr}`
+            : `1 ~ ${qcount}쿼터 전술판 · ${dateStr}`;
         ctx.fillText(subtitle, totalW / 2, headerH / 2 + 28);
 
-        // Pitches in 2×2
-        const pitchY1 = headerH + gap;
-        const pitchY2 = pitchY1 + h + gap;
-        ctx.drawImage(canvases[0], 0,        pitchY1);
-        ctx.drawImage(canvases[1], w + gap,  pitchY1);
-        ctx.drawImage(canvases[2], 0,        pitchY2);
-        ctx.drawImage(canvases[3], w + gap,  pitchY2);
+        // Pitches in cols×rows grid (last row centered when incomplete)
+        const lastRowStart = (rows - 1) * cols;
+        canvases.forEach((cv, i) => {
+            const row = Math.floor(i / cols);
+            const col = i % cols;
+            let x = col * (w + gap);
+            const y = headerH + gap + row * (h + gap);
+            if (i >= lastRowStart && (qcount % cols !== 0)) {
+                const itemsInLastRow = qcount - lastRowStart;
+                const lastRowW = itemsInLastRow * w + (itemsInLastRow - 1) * gap;
+                const offset = (totalW - lastRowW) / 2;
+                x = offset + (i - lastRowStart) * (w + gap);
+            }
+            ctx.drawImage(cv, x, y);
+        });
 
         // Trigger download
         const link = document.createElement('a');
-        link.download = `tactical_board_${dateStr}_Q1-Q4.png`;
+        link.download = `tactical_board_${dateStr}_Q1-Q${qcount}.png`;
         link.href = composite.toDataURL('image/png');
         link.click();
     } catch (err) {
@@ -2008,6 +2140,15 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
         saveData();
     });
 });
+
+/* =========================================================
+   QUARTER 5 ADD / REMOVE (5쿼터 추가·제거)
+   ========================================================= */
+const q5AddBtnEl = document.getElementById('q5-add-btn');
+const q5RemoveBtnEl = document.getElementById('q5-remove-btn');
+if (q5AddBtnEl) q5AddBtnEl.addEventListener('click', addQuarter5);
+if (q5RemoveBtnEl) q5RemoveBtnEl.addEventListener('click', removeQuarter5);
+applyQ5State();
 
 /* =========================================================
    TACTICAL DRAWING MODE (arrows on pitch)
@@ -2510,7 +2651,8 @@ function openQuarterSwapModal(team) {
     if (bothChk) bothChk.checked = false;
 
     buttonsEl.innerHTML = '';
-    for (let q = 1; q <= 4; q++) {
+    const qcount = getQuarterCount();
+    for (let q = 1; q <= qcount; q++) {
         if (q === currentQuarter) continue;
         const btn = document.createElement('button');
         btn.className = 'quarter-swap-target-btn';
@@ -2667,7 +2809,9 @@ function applyPaste() {
     }
 
     const scope = (document.querySelector('input[name="paste-scope"]:checked') || {}).value || 'current';
-    const quarters = scope === 'all' ? [1, 2, 3, 4] : [currentQuarter];
+    const allQs = [];
+    for (let q = 1; q <= getQuarterCount(); q++) allQs.push(q);
+    const quarters = scope === 'all' ? allQs : [currentQuarter];
 
     quarters.forEach(q => {
         const data = teamData[pasteTeam][q];
@@ -2748,52 +2892,50 @@ const summaryBody = document.getElementById('summary-body');
 
 function computeQuarterCounts(team) {
     const stats = {};
-    for (let q = 1; q <= 4; q++) {
+    const qcount = getQuarterCount();
+    const zeros = () => Array.from({length: qcount}, () => 0);
+    for (let q = 1; q <= qcount; q++) {
         const data = teamData[team][q];
+        if (!data) continue;
         data.starters.forEach(s => {
             const starter = (s.customName || '').trim();
             const subIn = (s.subInName || '').trim();
             if (subIn) {
                 if (starter) {
-                    if (!stats[starter]) stats[starter] = [0, 0, 0, 0];
+                    if (!stats[starter]) stats[starter] = zeros();
                     stats[starter][q - 1] += 0.5;
                 }
-                if (!stats[subIn]) stats[subIn] = [0, 0, 0, 0];
+                if (!stats[subIn]) stats[subIn] = zeros();
                 stats[subIn][q - 1] += 0.5;
             } else if (starter) {
-                if (!stats[starter]) stats[starter] = [0, 0, 0, 0];
+                if (!stats[starter]) stats[starter] = zeros();
                 stats[starter][q - 1] += 1;
             }
         });
         data.subs.forEach(s => {
             const name = (s.customName || '').trim();
-            if (name && !stats[name]) stats[name] = [0, 0, 0, 0];
+            if (name && !stats[name]) stats[name] = zeros();
         });
     }
     return stats;
 }
 
 // Role-aware: tracks each player's GK time vs field time per quarter.
-// Returns { name: { quarters: [{gk, field}, ...x4], gkTotal, fieldTotal } }
+// Returns { name: { quarters: [{gk, field}, ...], gkTotal, fieldTotal } }
 function computeQuarterRoleCounts(team) {
     const stats = {};
+    const qcount = getQuarterCount();
     const ensure = (name) => {
         if (!stats[name]) {
-            stats[name] = {
-                quarters: [
-                    { gk: 0, field: 0 },
-                    { gk: 0, field: 0 },
-                    { gk: 0, field: 0 },
-                    { gk: 0, field: 0 }
-                ],
-                gkTotal: 0,
-                fieldTotal: 0
-            };
+            const arr = [];
+            for (let i = 0; i < qcount; i++) arr.push({ gk: 0, field: 0 });
+            stats[name] = { quarters: arr, gkTotal: 0, fieldTotal: 0 };
         }
         return stats[name];
     };
-    for (let q = 1; q <= 4; q++) {
+    for (let q = 1; q <= qcount; q++) {
         const data = teamData[team][q];
+        if (!data) continue;
         data.starters.forEach(s => {
             const isGK = s.name === 'GK';
             const roleKey = isGK ? 'gk' : 'field';
@@ -2825,6 +2967,10 @@ function computeQuarterRoleCounts(team) {
 
 function renderSummary() {
     summaryBody.innerHTML = '';
+    const qcount = getQuarterCount();
+    const qHeaderHtml = Array.from({length: qcount}, (_, i) => `<th>${i + 1}Q</th>`).join('');
+    const buildQuarterCells = (stat, key) =>
+        Array.from({length: qcount}, (_, i) => `<td>${stat.quarters[i][key] || '-'}</td>`).join('');
     activeTeams().forEach(team => {
         const counts = computeQuarterRoleCounts(team);
         const allNames = Object.keys(counts);
@@ -2868,10 +3014,7 @@ function renderSummary() {
                 <thead>
                     <tr>
                         <th>선수</th>
-                        <th>1Q</th>
-                        <th>2Q</th>
-                        <th>3Q</th>
-                        <th>4Q</th>
+                        ${qHeaderHtml}
                         <th>GK 합</th>
                     </tr>
                 </thead>
@@ -2883,10 +3026,7 @@ function renderSummary() {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${name}</td>
-                    <td>${stat.quarters[0].gk || '-'}</td>
-                    <td>${stat.quarters[1].gk || '-'}</td>
-                    <td>${stat.quarters[2].gk || '-'}</td>
-                    <td>${stat.quarters[3].gk || '-'}</td>
+                    ${buildQuarterCells(stat, 'gk')}
                     <td class="total-cell">${stat.gkTotal}</td>
                 `;
                 gkBody.appendChild(tr);
@@ -2916,10 +3056,7 @@ function renderSummary() {
                 <thead>
                     <tr>
                         <th>선수</th>
-                        <th>1Q</th>
-                        <th>2Q</th>
-                        <th>3Q</th>
-                        <th>4Q</th>
+                        ${qHeaderHtml}
                         <th>필드 합</th>
                     </tr>
                 </thead>
@@ -2935,10 +3072,7 @@ function renderSummary() {
                 }
                 tr.innerHTML = `
                     <td>${name}</td>
-                    <td>${stat.quarters[0].field || '-'}</td>
-                    <td>${stat.quarters[1].field || '-'}</td>
-                    <td>${stat.quarters[2].field || '-'}</td>
-                    <td>${stat.quarters[3].field || '-'}</td>
+                    ${buildQuarterCells(stat, 'field')}
                     <td class="total-cell">${stat.fieldTotal}</td>
                 `;
                 fieldBody.appendChild(tr);
