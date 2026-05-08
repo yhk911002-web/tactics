@@ -245,6 +245,17 @@ body.match-mode .blue-sidebar { display: none !important; }
 body.match-mode .player[data-team="blue"] { display: none !important; }
 body.match-mode .quarter-swap-options { display: none !important; }
 
+/* Match mode: shorter pitch (≈ top 1/3 trimmed) for compact view */
+body.match-mode .pitch {
+    aspect-ratio: 2 / 2;
+    max-width: min(450px, calc((100vh - 260px) * 1));
+}
+@media (max-width: 1000px) {
+    body.match-mode .pitch {
+        max-width: 450px;
+    }
+}
+
 .header-actions {
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -1335,10 +1346,19 @@ let teamData = {
 let swapState = { red: null, blue: null }; 
 
 function getFormationCoords(formationKey, team) {
+    const matchMode = teamData.gameMode === 'match';
     return formations[formationKey].map(p => {
         const topVal = parseFloat(p.top);
         const leftVal = parseFloat(p.left);
-        // Forwards (top < 30 in original layout) sit close to the center line for both teams,
+        // In match mode (single team, square pitch), use raw formation coords — no halving / no lateral offset
+        if (matchMode && team === 'red') {
+            return {
+                name: p.name,
+                top: `${topVal}%`,
+                left: `${leftVal}%`
+            };
+        }
+        // Intramural: forwards (top < 30 in original layout) sit close to the center line for both teams,
         // so apply a small lateral offset to avoid visual overlap with the opposing strikers.
         const isForward = topVal < 30;
         const lateralOffset = isForward ? 5 : 0;
@@ -2135,8 +2155,37 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
         const mode = btn.getAttribute('data-mode');
         if (!mode || mode === teamData.gameMode) return;
         applyGameMode(mode);
-        // Re-render lists so any pending-swap visuals clear cleanly
-        ['red', 'blue'].forEach(t => renderLists(t));
+
+        // Offer to re-apply formation for red so positions match the new pitch layout.
+        // Names/sub roster are preserved; only positional coords are reset.
+        const shouldReapply = confirm(
+            mode === 'match'
+                ? '매치전 모드에 맞게 빨강 팀 포메이션을 새 레이아웃(전체 피치)으로 재배치할까요?\n\n[확인] 모든 쿼터의 빨강 팀 좌표를 매치전 기본 위치로 재설정 (선수 이름·교체 명단은 유지)\n[취소] 기존 좌표 유지 (수동으로 포메이션 버튼 클릭 가능)'
+                : '자체전 모드로 돌아왔습니다. 빨강 팀 포메이션을 자체전 기본 위치(아래쪽 절반)로 재배치할까요?\n\n[확인] 모든 쿼터의 빨강 팀 좌표 재설정 (이름·교체 유지)\n[취소] 기존 좌표 유지'
+        );
+        if (shouldReapply) {
+            const savedQuarter = currentQuarter;
+            eachQuarter(q => {
+                if (!teamData.red[q]) return;
+                const fkey = (teamData.formations && teamData.formations.red && teamData.formations.red[q]) || '4-4-2';
+                const coords = getFormationCoords(fkey, 'red');
+                coords.forEach((pos, i) => {
+                    const slot = teamData.red[q].starters[i];
+                    if (!slot) return;
+                    slot.top = pos.top;
+                    slot.left = pos.left;
+                    slot.name = pos.name; // position label
+                });
+            });
+            currentQuarter = savedQuarter;
+        }
+
+        ['red', 'blue'].forEach(t => {
+            renderPitch(t);
+            renderLists(t);
+            renderStats(t);
+            updateFormationActiveClass(t);
+        });
         saveData();
     });
 });
