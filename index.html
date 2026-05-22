@@ -244,6 +244,8 @@ body.modal-open { overflow: hidden; } /* :has() fallback */
 body.match-mode .blue-sidebar { display: none !important; }
 body.match-mode .player[data-team="blue"] { display: none !important; }
 body.match-mode .quarter-swap-options { display: none !important; }
+/* Penalty arcs (D-shape near goal) — html2canvas can't render clip-path, so they look like full circles in captures. Hide in all modes. Center circle is kept for visual context. */
+.penalty-arc { display: none !important; }
 
 /* Match mode: shorter pitch (≈ top 1/3 trimmed) for compact view */
 body.match-mode .pitch {
