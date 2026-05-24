@@ -240,6 +240,68 @@ body.modal-open { overflow: hidden; } /* :has() fallback */
     color: #fff;
 }
 
+/* Help button (gradient violet, distinct from other action buttons) */
+.help-btn {
+    background: linear-gradient(135deg, #5e35b1, #3949ab) !important;
+    border-color: transparent !important;
+    color: #fff !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    font-weight: 700 !important;
+}
+.help-btn:hover {
+    background: linear-gradient(135deg, #7e57c2, #5c6bc0) !important;
+    transform: translateY(-1px);
+}
+
+/* Help modal — guide content */
+.help-modal-content {
+    max-width: 740px;
+}
+.help-body section {
+    margin-bottom: 18px;
+}
+.help-body section:last-child {
+    margin-bottom: 0;
+}
+.help-body h4 {
+    font-size: 0.98rem;
+    color: #b39ddb;
+    margin-bottom: 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(179,157,219,0.25);
+    font-weight: 700;
+}
+.help-body p, .help-body li {
+    font-size: 0.86rem;
+    line-height: 1.65;
+    color: rgba(255,255,255,0.88);
+}
+.help-body ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+.help-body li {
+    padding: 5px 0 5px 14px;
+    position: relative;
+}
+.help-body li::before {
+    content: "▸";
+    position: absolute;
+    left: 0;
+    color: rgba(179,157,219,0.7);
+    font-size: 0.82rem;
+}
+.help-body strong {
+    color: #fff;
+    font-weight: 700;
+}
+
+@media (max-width: 1000px) {
+    .help-body h4 { font-size: 1rem; }
+    .help-body li { font-size: 0.9rem; }
+}
+
 /* Match mode: hide blue team entirely (data preserved, just visually removed) */
 body.match-mode .blue-sidebar { display: none !important; }
 body.match-mode .player[data-team="blue"] { display: none !important; }
@@ -1077,6 +1139,7 @@ body.match-mode .pitch {
                         </div>
                         <h1 style="margin: 0;">Tactical Board</h1>
                     </div>
+                    <button id="help-btn" class="header-btn help-btn" type="button" title="앱 사용법 가이드">📖 사용법</button>
                     <div class="header-actions" style="display: flex; gap: 4px;">
                         <button id="summary-btn" class="header-btn" style="background:#6a1b9a; border-color:#6a1b9a;">📊 출전 요약</button>
                         <button id="export-img-btn" class="header-btn" style="background:#0288d1; border-color:#0288d1;" title="1~4쿼터를 한 장의 이미지로 캡처">📸 전체 캡처</button>
@@ -1182,6 +1245,95 @@ body.match-mode .pitch {
             <div class="rotation-actions">
                 <button class="modal-close" id="rotation-cancel">❌ 취소</button>
                 <button class="btn-apply" id="rotation-apply">🔄 이 대로 적용</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="help-modal">
+        <div class="modal-content help-modal-content">
+            <div class="modal-header">
+                <h2>📖 Tactical Board 사용법</h2>
+                <button class="modal-close" id="help-close">닫기</button>
+            </div>
+            <div class="help-body">
+                <section>
+                    <h4>🎯 기본 시작하기</h4>
+                    <ul>
+                        <li><strong>자체전 / 매치전</strong> 토글 (좌측 상단)<br>· 자체전: 빨강 + 파랑 두 팀 운용 / 매치전: 우리 팀 1팀만 (전체 피치)</li>
+                        <li><strong>1Q ~ 4Q 탭</strong>으로 쿼터별 라인업 관리. 5쿼터 필요시 <strong>+ 5Q</strong></li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>👥 선수 명단 편집</h4>
+                    <ul>
+                        <li>양쪽 사이드바에서 <strong>선발 11명 + 교체 5명</strong> 이름 입력</li>
+                        <li>구장 위 선수 마커를 <strong>드래그</strong>해서 위치 자유 이동</li>
+                        <li><strong>포메이션 버튼</strong>으로 4-4-2 / 4-3-3 / 4-2-3-1 등 즉시 적용</li>
+                        <li><strong>📋 일괄 입력</strong>: 카톡 등에서 복사한 명단을 한번에 붙여넣기 (1., 1), (1), 1번 등 다양한 접두사 자동 인식)</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>🔄 선수 교체</h4>
+                    <ul>
+                        <li>같은 쿼터 내 두 슬롯의 <strong>🔄</strong> 버튼을 차례로 클릭</li>
+                        <li>선발 ↔ 교체 클릭 시 선택:<br>· <strong>완전 교체</strong> (1:1 자리바꿈)<br>· <strong>중간 교체</strong> (둘이 각 0.5쿼터씩 출전)</li>
+                        <li><strong>🔁 쿼터 인원 교체</strong>: 한 쿼터의 라인업 + 포메이션을 다른 쿼터와 통째로 swap</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>🪄 자동화 기능</h4>
+                    <ul>
+                        <li><strong>🪄 공평하게 배치</strong> (2쿼터부터 활성): 이전 쿼터 누적 출전이 적은 필드 선수 우선으로 라인업 자동 추천<br>· GK는 <strong>지정 골키퍼</strong>로 자동 고정 (출전 균형 예외)</li>
+                        <li><strong>⬇️ 이전 쿼터 복사</strong>: 직전 쿼터의 라인업·포메이션·작전판을 그대로 복사</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>📊 출전 통계</h4>
+                    <ul>
+                        <li>사이드바 하단에 실시간 누적 출전 시간 표시</li>
+                        <li><strong>📊 출전 요약</strong> 버튼으로 전체 통계 모달<br>· 🥅 골키퍼 (출전 균형 예외) / ⚽ 필드 선수 (적게 뛴 순 정렬, ≤1쿼터는 🚨 경고)</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>📸 캡처 / 공유</h4>
+                    <ul>
+                        <li><strong>📸 전체 캡처</strong>: 모든 쿼터 라인업을 한 PNG로 합성해서 다운로드 → 카톡 공유</li>
+                        <li><strong>📤 공유코드 복사</strong>: 모든 데이터를 코드로 변환 → 다른 기기에서 <strong>📥 코드 불러오기</strong>로 복원</li>
+                        <li>모든 변경 사항은 <strong>브라우저에 자동 저장</strong> (재방문 시 그대로)</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>✏️ 전술 작전판 (그리기)</h4>
+                    <ul>
+                        <li>구장 아래 <strong>✏️ 그리기</strong> 토글로 화살표/선 그리기 모드 활성화</li>
+                        <li>색상 선택, ↩️ 되돌리기, 🧹 모두 지우기</li>
+                        <li>쿼터별 독립 보관 + 캡처 시 함께 포함됨</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>🎨 팀 커스텀</h4>
+                    <ul>
+                        <li>사이드바 상단 팀 이름 클릭하여 편집 (예: "우리팀" → "동남FC")</li>
+                        <li>팀 색상 피커(동그라미)로 유니폼 색상 변경 → 마커·통계·UI 자동 매칭</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h4>💡 활용 팁</h4>
+                    <ul>
+                        <li><strong>PC ↔ 폰</strong> 동기화: 공유 코드(📤📥)로 데이터 이동</li>
+                        <li>모바일에서는 사이드바가 <strong>구장 아래로 스크롤</strong>해야 보입니다</li>
+                        <li>매치전 모드 ↔ 자체전 모드 전환 시 포메이션 자동 재배치 옵션 제공</li>
+                        <li>잘못 변경했을 때는 <strong>🗑️ 초기화</strong> (단, 모든 데이터가 사라지니 주의)</li>
+                    </ul>
+                </section>
             </div>
         </div>
     </div>
@@ -2191,6 +2343,20 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
         saveData();
     });
 });
+
+/* =========================================================
+   HELP MODAL (📖 사용법)
+   ========================================================= */
+const helpBtnEl = document.getElementById('help-btn');
+const helpModal = document.getElementById('help-modal');
+const helpCloseBtn = document.getElementById('help-close');
+if (helpBtnEl) helpBtnEl.addEventListener('click', () => helpModal.classList.add('open'));
+if (helpCloseBtn) helpCloseBtn.addEventListener('click', () => helpModal.classList.remove('open'));
+if (helpModal) {
+    helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) helpModal.classList.remove('open');
+    });
+}
 
 /* =========================================================
    QUARTER 5 ADD / REMOVE (5쿼터 추가·제거)
