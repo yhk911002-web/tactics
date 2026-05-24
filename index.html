@@ -1121,10 +1121,6 @@ body.match-mode .pitch {
                     <h3>교체 명단 (5 Subs)</h3>
                     <ul class="player-list subs-list" id="red-subs-list"></ul>
                 </div>
-                <div class="list-section stats-section">
-                    <h3>출전 통계</h3>
-                    <ul class="stats-list" id="red-stats-list"></ul>
-                </div>
             </div>
         </div>
 
@@ -1213,10 +1209,6 @@ body.match-mode .pitch {
                 <div class="list-section">
                     <h3>교체 명단 (5 Subs)</h3>
                     <ul class="player-list subs-list" id="blue-subs-list"></ul>
-                </div>
-                <div class="list-section stats-section">
-                    <h3>출전 통계</h3>
-                    <ul class="stats-list" id="blue-stats-list"></ul>
                 </div>
             </div>
         </div>
@@ -1902,51 +1894,8 @@ function handleSwapClick(team, type, index) {
 }
 
 function renderStats(team) {
-    const nameCounts = {};
-    const qcount = getQuarterCount();
-    for (let q = 1; q <= qcount; q++) {
-        if (!teamData[team][q]) continue;
-        teamData[team][q].starters.forEach(s => {
-            const sName = s.customName.trim();
-            const subName = (s.subInName || '').trim();
-            
-            if (subName) {
-                if (sName) nameCounts[sName] = (nameCounts[sName] || 0) + 0.5;
-                nameCounts[subName] = (nameCounts[subName] || 0) + 0.5;
-            } else {
-                if (sName) nameCounts[sName] = (nameCounts[sName] || 0) + 1;
-            }
-        });
-        
-        teamData[team][q].subs.forEach(s => {
-            const name = s.customName.trim();
-            if (name && nameCounts[name] === undefined) {
-                nameCounts[name] = 0;
-            }
-        });
-    }
-    
-    const els = domElements[team];
-    els.statsListEl.innerHTML = '';
-    
-    const sortedNames = Object.keys(nameCounts).sort((a, b) => {
-        if (nameCounts[b] !== nameCounts[a]) {
-            return nameCounts[b] - nameCounts[a];
-        }
-        return a.localeCompare(b);
-    });
-
-    if (sortedNames.length === 0) {
-        els.statsListEl.innerHTML = '<li style="color:#888; justify-content:center;">이름을 입력하면 표시됩니다.</li>';
-        return;
-    }
-
-    sortedNames.forEach(name => {
-        const count = nameCounts[name];
-        const li = document.createElement('li');
-        li.innerHTML = `<span>${name}</span> <span class="count">${count} 쿼터</span>`;
-        els.statsListEl.appendChild(li);
-    });
+    // Sidebar stats removed — use the 📊 출전 요약 modal instead.
+    // Kept as a no-op so existing call sites (renderLists, handleSwapClick, etc.) stay safe.
 }
 
 function updateFormationActiveClass(team) {
