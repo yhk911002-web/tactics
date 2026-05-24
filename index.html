@@ -673,6 +673,53 @@ body.match-mode .pitch {
 
 .swap-btn.swapping { background: #4caf50 !important; color: #fff; box-shadow: 0 0 8px #4caf50; }
 
+/* Sub slot management (add / remove) */
+.subs-count-label {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.45);
+    font-weight: 500;
+    margin-left: 4px;
+}
+
+.remove-sub-btn {
+    background: rgba(244,67,54,0.18);
+    border: none;
+    color: #ff8a80;
+    cursor: pointer;
+    padding: 4px 7px;
+    border-radius: 4px;
+    margin-left: 4px;
+    font-size: 0.78rem;
+    transition: 0.2s;
+}
+.remove-sub-btn:hover {
+    background: rgba(244,67,54,0.5);
+    color: #fff;
+}
+
+.add-sub-btn {
+    width: calc(100% - 6px);
+    margin: 4px 3px 0 3px;
+    background: rgba(76,175,80,0.12);
+    border: 1px dashed rgba(76,175,80,0.5);
+    color: #c8e6c9;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.add-sub-btn:hover:not(:disabled) {
+    background: rgba(76,175,80,0.25);
+    color: #fff;
+    border-color: #66bb6a;
+}
+.add-sub-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 /* Quarter swap modal */
 .quarter-swap-buttons {
     display: flex;
@@ -1118,8 +1165,9 @@ body.match-mode .pitch {
                     <ul class="player-list starting-list" id="red-starting-list"></ul>
                 </div>
                 <div class="list-section">
-                    <h3>교체 명단 (5 Subs)</h3>
+                    <h3>교체 명단 <span class="subs-count-label" id="red-subs-count">(3/6)</span></h3>
                     <ul class="player-list subs-list" id="red-subs-list"></ul>
+                    <button class="add-sub-btn" data-team="red" type="button">➕ 교체 추가</button>
                 </div>
             </div>
         </div>
@@ -1207,8 +1255,9 @@ body.match-mode .pitch {
                     <ul class="player-list starting-list" id="blue-starting-list"></ul>
                 </div>
                 <div class="list-section">
-                    <h3>교체 명단 (5 Subs)</h3>
+                    <h3>교체 명단 <span class="subs-count-label" id="blue-subs-count">(3/6)</span></h3>
                     <ul class="player-list subs-list" id="blue-subs-list"></ul>
+                    <button class="add-sub-btn" data-team="blue" type="button">➕ 교체 추가</button>
                 </div>
             </div>
         </div>
@@ -1259,7 +1308,7 @@ body.match-mode .pitch {
                 <section>
                     <h4>👥 선수 명단 편집</h4>
                     <ul>
-                        <li>양쪽 사이드바에서 <strong>선발 11명 + 교체 5명</strong> 이름 입력</li>
+                        <li>양쪽 사이드바에서 <strong>선발 11명 + 교체 3~6명</strong> 이름 입력 (교체는 ➕/✕ 버튼으로 슬롯 추가·삭제)</li>
                         <li>구장 위 선수 마커를 <strong>드래그</strong>해서 위치 자유 이동</li>
                         <li><strong>포메이션 버튼</strong>으로 4-4-2 / 4-3-3 / 4-2-3-1 등 즉시 적용</li>
                         <li><strong>📋 일괄 입력</strong>: 카톡 등에서 복사한 명단을 한번에 붙여넣기 (1., 1), (1), 1번 등 다양한 접두사 자동 인식)</li>
@@ -1356,7 +1405,7 @@ body.match-mode .pitch {
             </div>
             <div class="paste-intro">
                 카카오톡 등에서 복사한 참석자 명단을 한 줄에 한 명씩 붙여넣어 주세요.<br>
-                "1.", "1)", "1번", "(1)", "-", "*" 같은 접두사는 자동으로 제거됩니다. (선발 11명 + 교체 5명 = 최대 16명)
+                "1.", "1)", "1번", "(1)", "-", "*" 같은 접두사는 자동으로 제거됩니다. (선발 11명 + 교체 3~6명 = 최대 17명)
             </div>
             <div class="paste-toolbar-row">
                 <button id="paste-from-clipboard" class="tool-btn">📥 클립보드에서 가져오기</button>
@@ -1524,8 +1573,11 @@ function getFormationCoords(formationKey, team) {
     });
 }
 
-function createSubs() {
-    return Array.from({length: 5}, (_, i) => ({ id: `sub-${i+1}`, customName: '' }));
+const MIN_SUBS = 3;
+const MAX_SUBS = 6;
+
+function createSubs(count = MIN_SUBS) {
+    return Array.from({length: count}, (_, i) => ({ id: `sub-${Date.now()}-${i}`, customName: '' }));
 }
 
 function saveData() {
@@ -1794,17 +1846,28 @@ function renderLists(team) {
         els.startingListEl.appendChild(li);
     });
     
-    // Render Subs
+    // Render Subs (3 ~ 6 slots, dynamic)
     els.subsListEl.innerHTML = '';
+    const subsLen = data.subs.length;
+    const canRemoveSub = subsLen > MIN_SUBS;
     data.subs.forEach((p, i) => {
         const li = document.createElement('li');
+        const removeHtml = canRemoveSub
+            ? `<button class="remove-sub-btn" data-team="${team}" data-index="${i}" type="button" title="이 교체 슬롯 삭제">✕</button>`
+            : '';
         li.innerHTML = `
             <span style="width: 40px; font-size: 0.8rem; color: #888;">SUB</span>
             <input type="text" autocomplete="off" value="${p.customName}" placeholder="교체 선수" data-team="${team}" data-type="sub" data-index="${i}">
             <button class="swap-btn ${isSwapping(team, 'sub', i) ? 'swapping' : ''}" data-team="${team}" data-type="sub" data-index="${i}" title="같은 쿼터의 다른 슬롯 클릭으로 교체. 선발↔교체는 완전/중간(0.5Q) 선택">🔄</button>
+            ${removeHtml}
         `;
         els.subsListEl.appendChild(li);
     });
+    // Update count label and add-sub button state
+    const countLabel = document.getElementById(`${team}-subs-count`);
+    if (countLabel) countLabel.innerText = `(${subsLen}/${MAX_SUBS})`;
+    const addSubBtn = document.querySelector(`.add-sub-btn[data-team="${team}"]`);
+    if (addSubBtn) addSubBtn.disabled = subsLen >= MAX_SUBS;
 
     // Event Listeners for inputs
     document.querySelectorAll(`.sidebar[data-team="${team}"] .player-list input`).forEach(input => {
@@ -1835,6 +1898,36 @@ function renderLists(team) {
             handleSwapClick(t, type, idx);
         });
     });
+
+    // Event Listeners for remove-sub buttons
+    document.querySelectorAll(`.sidebar[data-team="${team}"] .remove-sub-btn`).forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const t = e.currentTarget.getAttribute('data-team');
+            const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+            removeSubSlot(t, idx);
+        });
+    });
+}
+
+function addSubSlot(team) {
+    const subs = teamData[team][currentQuarter].subs;
+    if (subs.length >= MAX_SUBS) return;
+    subs.push({ id: `sub-${Date.now()}`, customName: '' });
+    saveData();
+    renderLists(team);
+}
+
+function removeSubSlot(team, index) {
+    const subs = teamData[team][currentQuarter].subs;
+    if (subs.length <= MIN_SUBS) return;
+    if (index < 0 || index >= subs.length) return;
+    // Clear any pending swap that targets this sub
+    if (swapState[team] && swapState[team].type === 'sub' && swapState[team].index === index) {
+        swapState[team] = null;
+    }
+    subs.splice(index, 1);
+    saveData();
+    renderLists(team);
 }
 
 function isSwapping(team, type, index) {
@@ -2294,6 +2387,16 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 });
 
 /* =========================================================
+   ADD-SUB BUTTONS (➕ 교체 추가)
+   ========================================================= */
+document.querySelectorAll('.add-sub-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const team = btn.getAttribute('data-team');
+        if (team) addSubSlot(team);
+    });
+});
+
+/* =========================================================
    HELP MODAL (📖 사용법)
    ========================================================= */
 const helpBtnEl = document.getElementById('help-btn');
@@ -2568,16 +2671,17 @@ function suggestRotation(team) {
         }
     });
 
-    // Step 4: Subs — remaining players, by total time ascending
+    // Step 4: Subs — remaining players, by total time ascending (size up to current quarter's sub count)
     const totalBefore = {};
     allNames.forEach(n => { totalBefore[n] = fieldBefore[n] + gkBefore[n]; });
+    const subCount = (teamData[team][q] && teamData[team][q].subs) ? teamData[team][q].subs.length : MIN_SUBS;
     const newSubs = allNames
         .filter(n => !assigned.has(n))
         .sort((a, b) => {
             if (totalBefore[a] !== totalBefore[b]) return totalBefore[a] - totalBefore[b];
             return a.localeCompare(b);
         })
-        .slice(0, 5);
+        .slice(0, subCount);
 
     // For modal display: "sorted" is the left-column ranking by field time asc
     const sorted = allNames.slice().sort((a, b) => {
@@ -2695,7 +2799,8 @@ function openRotationModal(team) {
     subsLabel.innerText = '교체 명단';
     right.appendChild(subsLabel);
 
-    for (let i = 0; i < 5; i++) {
+    const previewSubCount = teamData[team][q].subs.length;
+    for (let i = 0; i < previewSubCount; i++) {
         const newName = result.newSubs[i] || '';
         const changed = newName !== currentSubs[i] && newName !== '';
         const row = document.createElement('div');
@@ -2881,7 +2986,7 @@ function parseRoster(text) {
                 .trim();
         } while (line !== prev && line.length);
         if (line) out.push(line);
-        if (out.length >= 16) break;
+        if (out.length >= 11 + MAX_SUBS) break;
     }
     return out;
 }
@@ -2909,7 +3014,8 @@ function renderPastePreview() {
     const names = parseRoster(text);
     const totalLines = text.split(/\r?\n/).filter(l => l.trim()).length;
 
-    countInfo.innerText = `인식된 이름: ${names.length}명${totalLines > 16 ? ` (입력 ${totalLines}줄 중 앞 16개만)` : ''}`;
+    const maxNames = 11 + MAX_SUBS;
+    countInfo.innerText = `인식된 이름: ${names.length}명${totalLines > maxNames ? ` (입력 ${totalLines}줄 중 앞 ${maxNames}개만)` : ''}`;
 
     previewEl.innerHTML = '';
 
@@ -2944,7 +3050,10 @@ function renderPastePreview() {
     subsLabel.innerText = '교체 명단';
     previewEl.appendChild(subsLabel);
 
-    for (let i = 0; i < 5; i++) {
+    const previewSubCount = teamData[pasteTeam] && teamData[pasteTeam][q] && teamData[pasteTeam][q].subs
+        ? teamData[pasteTeam][q].subs.length
+        : MIN_SUBS;
+    for (let i = 0; i < previewSubCount; i++) {
         const idx = 11 + i;
         const row = document.createElement('div');
         row.className = 'rotation-row' + (names[idx] ? ' rot-changed' : '');
@@ -2957,10 +3066,11 @@ function renderPastePreview() {
         previewEl.appendChild(row);
     }
 
-    if (totalLines > 16) {
+    const totalSlots = 11 + previewSubCount;
+    if (totalLines > totalSlots) {
         const warn = document.createElement('div');
         warn.className = 'paste-overflow-warn';
-        warn.innerText = `⚠️ 입력된 ${totalLines}줄 중 앞 16명만 사용됩니다. 나머지는 무시됩니다.`;
+        warn.innerText = `⚠️ 입력된 ${totalLines}줄 중 앞 ${totalSlots}명만 사용됩니다. 더 많은 교체 슬롯이 필요하면 "➕ 교체 추가"로 늘리세요.`;
         previewEl.appendChild(warn);
     }
 }
@@ -2985,8 +3095,11 @@ function applyPaste() {
             if (idx < 11) {
                 data.starters[idx].customName = name;
                 data.starters[idx].subInName = '';
-            } else if (idx < 16) {
-                data.subs[idx - 11].customName = name;
+            } else {
+                const subIdx = idx - 11;
+                if (subIdx < data.subs.length) {
+                    data.subs[subIdx].customName = name;
+                }
             }
         });
     });
