@@ -2009,6 +2009,7 @@ function renderStats(team) {
     // Kept as a no-op so existing call sites (renderLists, handleSwapClick, etc.) stay safe.
 }
 
+
 function updateFormationActiveClass(team) {
     const key = (teamData.formations && teamData.formations[team] && teamData.formations[team][currentQuarter]) || null;
     document.querySelectorAll(`.formation-btn[data-team="${team}"]:not(.copy-prev-btn):not(.auto-rotate-btn):not(.paste-roster-btn):not(.quarter-swap-btn)`).forEach(btn => {
@@ -2196,6 +2197,100 @@ document.querySelectorAll('.copy-prev-btn').forEach(btn => {
 // Image Export — capture all 4 quarters and merge into one composite PNG
 const exportImgBtn = document.getElementById('export-img-btn');
 
+// Builds a per-quarter substitute roster panel, half the width of the pitch.
+// Sits to the right of each captured pitch. All sizes scale with panel width.
+function buildPitchSubsPanel(q, pitchHeight, pitchWidth, scale) {
+    const width = Math.round(pitchWidth / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = pitchHeight;
+    const ctx = canvas.getContext('2d');
+
+    // Proportional sizes (all relative to panel width)
+    const titleFont   = Math.round(width * 0.085);   // ≈ 8.5%
+    const teamFont    = Math.round(width * 0.065);   // ≈ 6.5%
+    const nameFont    = Math.round(width * 0.058);   // ≈ 5.8%
+    const emptyFont   = Math.round(width * 0.05);
+    const padding     = Math.round(width * 0.06);
+    const nameLineH   = Math.round(nameFont * 1.5);
+    const teamLineH   = Math.round(teamFont * 1.7);
+    const titleBlockH = Math.round(titleFont * 1.7);
+    const teamGap     = Math.round(width * 0.045);
+    const numGap      = Math.round(nameFont * 0.5);
+
+    // Panel background
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(0, 0, width, pitchHeight);
+    // Subtle left border
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(0, 0, Math.max(2, 2 * scale), pitchHeight);
+
+    // Title
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = `bold ${titleFont}px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText('🔄 교체 명단', padding, padding);
+
+    // Title underline
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(padding, padding + titleFont + Math.round(titleFont * 0.25), width - padding * 2, Math.max(1, 1 * scale));
+
+    let y = padding + titleBlockH;
+    const bottomLimit = pitchHeight - padding;
+    const maxTextW = width - padding * 2 - Math.round(width * 0.02);
+
+    const ellipsize = (text) => {
+        if (ctx.measureText(text).width <= maxTextW) return text;
+        let t = text;
+        while (t.length > 1 && ctx.measureText(t + '…').width > maxTextW) {
+            t = t.slice(0, -1);
+        }
+        return t + '…';
+    };
+
+    const teams = activeTeams();
+    teams.forEach((team, teamIdx) => {
+        if (!teamData[team] || !teamData[team][q]) return;
+        const subs = teamData[team][q].subs || [];
+        const names = subs.map(s => (s.customName || '').trim()).filter(Boolean);
+        const color = (teamData.teamColors && teamData.teamColors[team]) || (team === 'red' ? '#e53935' : '#1e88e5');
+        const teamName = (teamData.teamNames && teamData.teamNames[team]) || (team === 'red' ? '🔴 Red Team' : '🔵 Blue Team');
+
+        // Team header
+        if (y + teamLineH > bottomLimit) return;
+        ctx.fillStyle = color;
+        ctx.font = `bold ${teamFont}px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
+        ctx.fillText(ellipsize(teamName), padding, y);
+        y += teamLineH;
+
+        // Names
+        if (names.length) {
+            ctx.font = `${nameFont}px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
+            names.forEach((nm, idx) => {
+                if (y + nameLineH > bottomLimit) return;
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                const numStr = `${idx + 1}.`;
+                ctx.fillText(numStr, padding, y);
+                ctx.fillStyle = 'rgba(255,255,255,0.95)';
+                const numW = ctx.measureText(numStr).width;
+                ctx.fillText(ellipsize(nm), padding + numW + numGap, y);
+                y += nameLineH;
+            });
+        } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = `italic ${emptyFont}px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif`;
+            ctx.fillText('(없음)', padding, y);
+            y += nameLineH;
+        }
+
+        // Gap between teams
+        if (teamIdx < teams.length - 1) y += teamGap;
+    });
+
+    return canvas;
+}
+
 async function captureAllQuarters() {
     const originalQuarter = currentQuarter;
     const originalText = exportImgBtn.innerText;
@@ -2225,8 +2320,21 @@ async function captureAllQuarters() {
             // Wait two animation frames to ensure layout/paint is settled
             await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-            const canvas = await html2canvas(pitch, { backgroundColor: '#1e1e1e', scale: 2 });
-            canvases.push(canvas);
+            const pitchCanvas = await html2canvas(pitch, { backgroundColor: '#1e1e1e', scale: 2 });
+
+            // Build a per-quarter substitute roster panel placed to the right of the pitch.
+            // Panel width = half of the pitch width.
+            const subsPanel = buildPitchSubsPanel(q, pitchCanvas.height, pitchCanvas.width, 2);
+            const panelGap = 14 * 2; // scaled gap between pitch and panel
+            const combinedCanvas = document.createElement('canvas');
+            combinedCanvas.width = pitchCanvas.width + panelGap + subsPanel.width;
+            combinedCanvas.height = pitchCanvas.height;
+            const cctx = combinedCanvas.getContext('2d');
+            cctx.fillStyle = '#1e1e1e';
+            cctx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+            cctx.drawImage(pitchCanvas, 0, 0);
+            cctx.drawImage(subsPanel, pitchCanvas.width + panelGap, 0);
+            canvases.push(combinedCanvas);
 
             pitch.removeChild(watermark);
         }
