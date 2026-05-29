@@ -612,6 +612,21 @@ body.match-mode .pitch {
     box-shadow: 0 10px 15px rgba(0,0,0,0.5);
 }
 
+.player.pitch-swap-selected {
+    outline: 3px solid #ffeb3b;
+    outline-offset: 2px;
+    box-shadow: 0 0 14px 4px rgba(255,235,59,0.7);
+    transform: translate(-50%, -50%) scale(1.15);
+    z-index: 9;
+    cursor: crosshair;
+    animation: pitch-swap-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pitch-swap-pulse {
+    from { box-shadow: 0 0 10px 3px rgba(255,235,59,0.6); }
+    to   { box-shadow: 0 0 20px 8px rgba(255,235,59,0.9); }
+}
+
 /* Lists */
 .list-container {
     flex: 1;
@@ -1202,7 +1217,7 @@ body.match-mode .pitch {
                     <button class="quarter-meta-btn quarter-remove-btn" id="q5-remove-btn" type="button" title="5쿼터 제거 (데이터 삭제)" style="display:none;">✕ 5Q</button>
                 </div>
                 <p class="hint-text">
-                    선수 드래그로 위치 이동 · 🔄 같은 쿼터 내 두 슬롯 클릭으로 교체<br>
+                    선수 드래그로 위치 이동 · 선수 클릭 후 다른 선수 클릭으로 위치 교환 · 🔄 같은 쿼터 내 두 슬롯 클릭으로 교체<br>
                     선발 ↔ 교체 시 <strong>완전 교체</strong>(1:1 자리 바꿈) 또는 <strong>중간 교체</strong>(둘이 각 0.5쿼터씩 출전) 선택 가능 · <strong>🔁 쿼터 인원 교체</strong>는 사이드바 버튼 사용
                 </p>
             </header>
@@ -1310,6 +1325,7 @@ body.match-mode .pitch {
                     <ul>
                         <li>양쪽 사이드바에서 <strong>선발 11명 + 교체 3~6명</strong> 이름 입력 (교체는 ➕/✕ 버튼으로 슬롯 추가·삭제)</li>
                         <li>구장 위 선수 마커를 <strong>드래그</strong>해서 위치 자유 이동</li>
+                        <li>구장 위 선수를 <strong>클릭</strong>한 뒤(노란 테두리로 선택됨) <strong>다른 선수를 클릭</strong>하면 두 선수의 위치가 서로 바뀜 (같은 선수 다시 클릭 시 선택 취소)</li>
                         <li><strong>포메이션 버튼</strong>으로 4-4-2 / 4-3-3 / 4-2-3-1 등 즉시 적용</li>
                         <li><strong>📋 일괄 입력</strong>: 카톡 등에서 복사한 명단을 한번에 붙여넣기 (1., 1), (1), 1번 등 다양한 접두사 자동 인식)</li>
                     </ul>
@@ -1318,6 +1334,7 @@ body.match-mode .pitch {
                 <section>
                     <h4>🔄 선수 교체</h4>
                     <ul>
+                        <li><strong>위치만 바꾸기</strong>: 구장 위 선수를 클릭 → 다른 선수 클릭 (명단은 그대로, 자리만 교환)</li>
                         <li>같은 쿼터 내 두 슬롯의 <strong>🔄</strong> 버튼을 차례로 클릭</li>
                         <li>선발 ↔ 교체 클릭 시 선택:<br>· <strong>완전 교체</strong> (1:1 자리바꿈)<br>· <strong>중간 교체</strong> (둘이 각 0.5쿼터씩 출전)</li>
                         <li><strong>🔁 쿼터 인원 교체</strong>: 한 쿼터의 라인업 + 포메이션을 다른 쿼터와 통째로 swap</li>
@@ -1790,6 +1807,7 @@ function initPitch() {
 function loadQuarter(q) {
     currentQuarter = q;
     swapState = { red: null, blue: null };
+    clearPitchSwap();
 
     quarterBtns.forEach(btn => {
         btn.classList.toggle('active', parseInt(btn.getAttribute('data-quarter')) === q);
@@ -2023,6 +2041,17 @@ function applyFormation(team, formationKey) {
     saveData(); // Save on formation change
 }
 
+// ── Pitch click-to-swap state ──────────────────────────────────────────────
+// Holds { team, index, el } of the first-clicked player, or null if none.
+let pitchSwapFirst = null;
+
+function clearPitchSwap() {
+    if (pitchSwapFirst) {
+        pitchSwapFirst.el.classList.remove('pitch-swap-selected');
+        pitchSwapFirst = null;
+    }
+}
+
 function setupDrag(el, team) {
     let isDragging = false;
     let hasMoved = false; 
@@ -2085,12 +2114,45 @@ function setupDrag(el, team) {
 
     const onMouseUp = () => {
         isDragging = false;
+
         if (hasMoved) {
+            // ── Drag ended: save new position ──
             el.classList.remove('dragging');
             const playerIndex = players[team].indexOf(el);
             teamData[team][currentQuarter].starters[playerIndex].top = el.style.top;
             teamData[team][currentQuarter].starters[playerIndex].left = el.style.left;
-            saveData(); // Save on drag drop
+            saveData();
+            // Cancel any pending swap selection when the user drags
+            clearPitchSwap();
+        } else {
+            // ── Click: handle pitch click-to-swap ──
+            const clickedIndex = players[team].indexOf(el);
+
+            if (!pitchSwapFirst) {
+                // First click — select this player
+                pitchSwapFirst = { team, index: clickedIndex, el };
+                el.classList.add('pitch-swap-selected');
+            } else if (pitchSwapFirst.el === el) {
+                // Clicked the same player again — deselect
+                clearPitchSwap();
+            } else {
+                // Second click — swap positions between the two players
+                const firstData  = teamData[pitchSwapFirst.team][currentQuarter].starters[pitchSwapFirst.index];
+                const secondData = teamData[team][currentQuarter].starters[clickedIndex];
+
+                const tempTop  = firstData.top;
+                const tempLeft = firstData.left;
+                firstData.top  = secondData.top;
+                firstData.left = secondData.left;
+                secondData.top  = tempTop;
+                secondData.left = tempLeft;
+
+                const firstTeam = pitchSwapFirst.team;
+                clearPitchSwap();
+                renderPitch(firstTeam);
+                if (team !== firstTeam) renderPitch(team);
+                saveData();
+            }
         }
         
         document.removeEventListener('mousemove', onMouseMove);
